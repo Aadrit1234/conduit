@@ -20,7 +20,9 @@ export class MemoryStore implements RoomStore {
 
   async createRoom(input: CreateRoomInput): Promise<Room> {
     if (this.byCode.has(input.code)) {
-      throw new Error(`room code ${input.code} already exists`);
+      const err = new Error(`room code ${input.code} already exists`);
+      (err as Error & { code?: string }).code = "23505"; // unique violation — same contract as pg
+      throw err;
     }
     const now = new Date();
     const id = randomUUID();

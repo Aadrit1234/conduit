@@ -35,12 +35,17 @@ export class PostgresStore implements RoomStore {
   }
 
   async createRoom(input: CreateRoomInput): Promise<Room> {
+    // expires_at is computed here (not via make_interval) so Postgres never has
+    // to infer a parameter type that is NULL for permanent rooms.
+    const expiresAt =
+      input.mode === "ephemeral" && input.ttlSeconds != null
+        ? new Date(Date.now() + input.ttlSeconds * 1000)
+        : null;
     const { rows } = await this.pool.query<RoomRow>(
       `INSERT INTO rooms (code, mode, name, ttl_seconds, key_blob, expires_at)
-       VALUES ($1, $2, $3, $4,
-               CASE WHEN $2 = 'ephemeral' AND $4 IS NOT NULL THEN now() + make_interval(secs => $4) ELSE NULL END)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, code, name, mode, ttl_seconds, key_blob, created_at, expires_at`,
-      [input.code, input.mode, input.name ?? "", input.ttlSeconds, input.keyBlob ?? Buffer.alloc(0)]
+      [input.code, input.mode, input.name ?? "", input.ttlSeconds, input.keyBlob ?? Buffer.alloc(0), expiresAt]
     );
     return this.toRoom(rows[0]);
   }

@@ -75,7 +75,16 @@ export const roomsPlugin: FastifyPluginAsync<RoomPluginOptions> = async (app, op
       mode,
       ttlSeconds: mode === "ephemeral" ? ttlMinutes * 60 : null,
       keyBlob: req.body?.keyBlob ? Buffer.from(req.body.keyBlob, "base64") : null,
-    }).catch(() => null);
+    }).catch((err) => {
+      // A unique-violation means the code is taken; anything else is a real store
+      // failure (e.g. schema mismatch) and must not be masked as a collision.
+      if (err?.code === "23505") return null;
+      app.log.error({ err, code }, "failed to create room");
+      return undefined;
+    });
+    if (room === undefined) {
+      return reply.code(500).send({ error: "could not create room" });
+    }
     if (!room) {
       return reply.code(409).send({ error: `room code ${code} is taken` });
     }
