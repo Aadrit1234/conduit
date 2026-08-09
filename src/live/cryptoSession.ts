@@ -126,7 +126,7 @@ export class CryptoSession {
 
   /** Wire the signal handler, publish identity, and start key exchange. */
   start(): void {
-    this.socket.setSignalHandler((from, data) => this.handleSignal(from, data as SignalData));
+    this.socket.addSignalHandler((from, data) => this.handleSignal(from, data as SignalData));
 
     // First member to join generates generation 1; a reload picks up the chain.
     if (this.keys.size === 0 && this.isCreator) {

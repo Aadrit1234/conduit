@@ -32,7 +32,7 @@ npm run preview  # serve the production build
 | `src/three/` | WebGL scene — morphing core blob, particle field, streaming rings, floating room nodes |
 | `src/live/` | Backend client: REST (rooms), WebSocket protocol, E2EE session |
 | `src/crypto/` | X25519 (pure JS) + Web Crypto AES-256-GCM / HKDF |
-| `src/webrtc/` | Peer-to-peer mesh: BroadcastChannel signaling, chunked SHA-256-verified transfers |
+| `src/webrtc/` | Peer-to-peer mesh: server-relay signaling (cross-device), chunked SHA-256-verified transfers |
 | `docs/ARCHITECTURE.md` | Full technical spec: stack, data schema, file handling, security model, implementation roadmap |
 
 **Routing** — real paths via React Router: `/` (landing), `/room` (create/join), `/room/:code`
@@ -41,19 +41,32 @@ link is the invite.
 
 ## Real WebRTC peer-to-peer transfers
 
-Files you drop in a room travel **peer-to-peer over WebRTC DataChannels** between tabs that
-joined the same room code — no server involved. Signaling rides a same-origin
-`BroadcastChannel`, each tab is a node in a full mesh, and every transfer is chunked,
+Files you drop in a room travel **peer-to-peer over WebRTC DataChannels** between any two
+members — two tabs, two devices, two networks. Signaling rides the server's opaque `signal`
+relay (the server forwards it without ever inspecting it), so peers discover each other across
+devices and browsers; each member is a node in a full mesh, and every transfer is chunked,
 SHA-256-verified, and backpressure-buffered.
 
-To try it:
+For large files on the public internet, add a TURN relay so peers behind restrictive NATs and
+firewalls can still connect — set `VITE_ICE_SERVERS` (a JSON array of `RTCIceServer`) at build
+time, e.g. a free Metered/Twilio account or your own coturn server:
+
+```
+VITE_ICE_SERVERS=[{"urls":"turn:relay.metered.ca:80","username":"u","credential":"p"}]
+```
+
+Unset, the app falls back to public STUN — fine for most NATs, but large cross-network files
+are much more reliable with TURN. There are no upload limits: transfer speed is whatever the
+peers' connections allow, and the server's disk is never touched.
+
+To try it locally:
 
 1. Create a room at `http://localhost:5173/room`, then open the resulting `/room/CODE` link in a second tab.
 2. Wait for the topbar to read `mesh · 1 peer`, then drop a file in either tab — it appears
    in the other tab's file tree, verified by hash, with a download button.
 
 No peers connected? The drop shows a "no peers connected" hint instead — real transfers need
-another tab on the same room code.
+another member on the same room code.
 
 ## Live rooms over the real backend
 

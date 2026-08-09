@@ -1,4 +1,4 @@
-import { RoomNetwork, type RoomNetworkHandlers } from "./roomNetwork";
+import { RoomNetwork, type RoomNetworkHandlers, type RoomSignaling } from "./roomNetwork";
 import { encodeChunk, decodeChunk, sha256Hex, fmtBytes } from "./framing";
 
 /**
@@ -7,28 +7,16 @@ import { encodeChunk, decodeChunk, sha256Hex, fmtBytes } from "./framing";
  * Verifies, in order:
  *  1. the browser can actually establish WebRTC connections (raw probe),
  *  2. chunk framing + SHA-256 primitives,
- *  3. two RoomNetwork instances negotiating a real RTCPeerConnection
- *     (loopback host candidates, loopback signaling) and opening a DataChannel,
+ *  3. two RoomNetwork instances negotiating a real RTCPeerConnection over a
+ *     loopback RoomSignaling transport (mirrors the server `signal` relay)
+ *     and opening a DataChannel,
  *  4. real file transfers in both directions with hash verification.
  *
- * The only simulated part is signaling transport: instead of a
- * BroadcastChannel (which excludes its own context), messages are looped back
- * to the other instance via queueMicrotask.
+ * The only simulated part is the signaling transport itself: instead of the
+ * server relay or a BroadcastChannel (which excludes its own context),
+ * messages are looped between two transports via queueMicrotask, with the
+ * same `peerId` (sender) / `to` (recipient) semantics the real paths use.
  */
-
-type FakeChannel = {
-  onmessage: ((ev: { data: unknown }) => void) | null;
-  postMessage(msg: unknown): void;
-  close(): void;
-};
-
-function fakeChannelPair(): [FakeChannel, FakeChannel] {
-  const a: FakeChannel = { onmessage: null, postMessage: () => {}, close() {} };
-  const b: FakeChannel = { onmessage: null, postMessage: () => {}, close() {} };
-  a.postMessage = (msg) => queueMicrotask(() => b.onmessage?.({ data: msg }));
-  b.postMessage = (msg) => queueMicrotask(() => a.onmessage?.({ data: msg }));
-  return [a, b];
-}
 
 function waitFor(cond: () => boolean, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -87,8 +75,29 @@ async function rawWebRtcProbe(): Promise<string> {
   }
 }
 
-function emptyHandlers() {
-  return { onPeers: () => {}, onSendProgress: () => {}, onReceiveStart: () => {}, onReceiveProgress: () => {}, onReceiveComplete: () => {} };
+/**
+ * Two RoomSignaling transports wired to each other, replicating the server
+ * relay's routing: point-to-point messages (`to`) go only to the recipient,
+ * broadcasts reach the other side, and the sender id is attributed by the
+ * transport (as the WS hub attributes `from`).
+ */
+function signalingPair(aId: string, bId: string): [RoomSignaling, RoomSignaling] {
+  const targets: Record<string, (from: string, msg: object) => void> = {};
+  const make = (myId: string, otherId: string): RoomSignaling => ({
+    myId,
+    send: (msg) => {
+      const m = msg as { to?: string };
+      if (m.to && m.to !== otherId) return; // server would drop it too
+      queueMicrotask(() => targets[otherId]?.(myId, msg));
+    },
+    onMessage: (cb) => {
+      targets[myId] = cb;
+      return () => {
+        delete targets[myId];
+      };
+    },
+  });
+  return [make(aId, bId), make(bId, aId)];
 }
 
 export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }> {
@@ -96,8 +105,13 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
   const step = (msg: string) => lines.push(msg);
 
   try {
-    // 1. raw capability probe — establishes whether this browser/context can do WebRTC
-    const probe = await rawWebRtcProbe();
+    // 1. raw capability probe — establishes whether this browser/context can do WebRTC.
+    // Right after a page load the context can still be throttled; retry once.
+    let probe = await rawWebRtcProbe();
+    if (!probe.includes('"opened":true')) {
+      await new Promise((r) => setTimeout(r, 1500));
+      probe = await rawWebRtcProbe();
+    }
     const probeOk = probe.includes('"opened":true');
     step(`raw WebRTC probe: ${probe}`);
     if (!probeOk) {
@@ -122,43 +136,20 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
     step(`sha256 ok (${hash.slice(0, 12)}…)`);
 
     // 3. two networks negotiate a real connection over loopback signaling
-    const [chA, chB] = fakeChannelPair();
-    const [netA, netB] = [new RoomNetwork("SELFTEST", emptyHandlers()), new RoomNetwork("SELFTEST", emptyHandlers())];
-
-    type NetHooks = {
-      handleSignal(m: unknown): unknown;
-      post(m: object): void;
-      peers: Map<string, { pc: RTCPeerConnection | null; connected: boolean }>;
-      channel: FakeChannel;
-      myId: string;
-      myName: string;
-    };
-    const aHooks = netA as unknown as NetHooks;
-    const bHooks = netB as unknown as NetHooks;
-
-    // Force distinct identities (constructor reuses the sessionStorage id).
-    aHooks.myId = "peer-A";
-    aHooks.myName = "Tab·AAAA";
-    bHooks.myId = "peer-B";
-    bHooks.myName = "Tab·BBBB";
-    aHooks.channel = chA;
-    bHooks.channel = chB;
-
-    // Bind signaling delivery to the network instances (mirrors how the real
-    // BroadcastChannel handler is bound with an arrow function).
-    chA.onmessage = (ev) => aHooks.handleSignal(ev.data);
-    chB.onmessage = (ev) => bHooks.handleSignal(ev.data);
+    const [aId, bId] = ["peer-A", "peer-B"];
+    const [sigA, sigB] = signalingPair(aId, bId);
 
     const aState = { peers: 0, sendPct: 0, received: null as null | { name: string; verified: boolean } };
     const bState = { peers: 0, recvPct: 0, received: null as null | { name: string; size: number; verified: boolean; sender: string } };
-    (netA as unknown as { handlers: RoomNetworkHandlers }).handlers = {
+
+    const aHandlers: RoomNetworkHandlers = {
       onPeers: (peers) => { aState.peers = peers.filter((p) => p.connected).length; },
       onSendProgress: (_id, _n, sent, total) => { aState.sendPct = Math.round((sent / total) * 100); },
       onReceiveStart: () => {},
       onReceiveProgress: () => {},
       onReceiveComplete: (f) => { aState.received = f; },
     };
-    (netB as unknown as { handlers: RoomNetworkHandlers }).handlers = {
+    const bHandlers: RoomNetworkHandlers = {
       onPeers: (peers) => { bState.peers = peers.filter((p) => p.connected).length; },
       onSendProgress: () => {},
       onReceiveStart: () => {},
@@ -166,17 +157,17 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
       onReceiveComplete: (f) => { bState.received = f; },
     };
 
-    // Kick off the mesh with a hello from A (mirrors net.start()).
-    aHooks.post({ type: "rtc-hello", peerId: netA.myId, name: netA.myName });
+    const netA = new RoomNetwork("SELFTEST", aHandlers, sigA);
+    const netB = new RoomNetwork("SELFTEST", bHandlers, sigB);
+    netA.start();
+    netB.start();
 
     const opened = await waitFor(() => aState.peers >= 1 && bState.peers >= 1, 15_000);
     if (!opened) {
-      const dump = [...aHooks.peers, ...bHooks.peers].map(([id, p]) => ({
-        id,
-        conn: p.pc?.connectionState,
-        sig: p.pc?.signalingState,
-        connected: p.connected,
-      }));
+      const dump = [
+        ...netA.peerList.map((p) => ({ side: "A", id: p.id, connected: p.connected })),
+        ...netB.peerList.map((p) => ({ side: "B", id: p.id, connected: p.connected })),
+      ];
       throw new Error(`datachannel never opened (${JSON.stringify(dump)})`);
     }
     step("WebRTC mesh connected · datachannel open on both sides");
@@ -195,7 +186,10 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
     if (bState.received!.name !== "mesh-test.bin") throw new Error("received name mismatch");
     if (bState.received!.size !== size) throw new Error(`received size mismatch: ${bState.received!.size} != ${size}`);
     if (!bState.received!.verified) throw new Error("SHA-256 verification FAILED");
-    if (bState.received!.sender !== "Tab·AAAA") throw new Error("sender attribution mismatch");
+    const expectedSender = `Tab·${aId.slice(-4).toUpperCase()}`;
+    if (bState.received!.sender !== expectedSender) {
+      throw new Error(`sender attribution mismatch: got "${bState.received!.sender}" want "${expectedSender}"`);
+    }
     step(`file transferred A→B: ${fmtBytes(size)} · sha256 verified (${aState.sendPct}% → ${bState.recvPct}%)`);
 
     // 5. bidirectional: B → A
@@ -240,7 +234,7 @@ export function renderSelfTest(container: HTMLElement) {
     </style>
     <div id="selftest">
       <h1>Conduit WebRTC self-test <span class="badge run">running…</span></h1>
-      <div class="status">raw WebRTC probe · loopback mesh · real DataChannel file transfers</div>
+      <div class="status">raw WebRTC probe · relay-style loopback mesh · real DataChannel file transfers</div>
       <div id="lines"></div>
     </div>`;
 

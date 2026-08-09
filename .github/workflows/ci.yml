@@ -68,8 +68,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-frontend:latest
-            ghcr.io/${{ github.repository }}-frontend:${{ github.sha }}
+            ghcr.io/${{ lower(github.repository) }}-frontend:latest
+            ghcr.io/${{ lower(github.repository) }}-frontend:${{ github.sha }}
 
       - name: Build & push backend
         uses: docker/build-push-action@v6
@@ -77,8 +77,8 @@ jobs:
           context: ./server
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}-backend:latest
-            ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
+            ghcr.io/${{ lower(github.repository) }}-backend:latest
+            ghcr.io/${{ lower(github.repository) }}-backend:${{ github.sha }}
 
   deploy:
     name: Deploy to server

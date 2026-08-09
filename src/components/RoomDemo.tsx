@@ -8,7 +8,7 @@ import {
   Lock, Paperclip, Play, Radio, RotateCcw, Send, Settings, Shield, Smile, Trash2, Upload, Users, Wifi, WifiOff, X, Zap,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
-import { RoomNetwork, type ReceivedFile, type Peer } from "../webrtc/roomNetwork";
+import { RoomNetwork, type ReceivedFile, type Peer, type RoomSignaling } from "../webrtc/roomNetwork";
 import { fmtBytes } from "../webrtc/framing";
 import { createRoom, joinRoom, burnRoom, updateRoom, wsUrlFor, guestName, type LiveRoom } from "../live/api";
 import { LiveRoomSocket, type ServerMember } from "../live/socket";
@@ -499,6 +499,18 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
 
   useEffect(() => {
     if (phase !== "live") return;
+    // Signaling rides the server's opaque `signal` relay so peers on different
+    // devices/browsers find each other (the WebRTC mesh is cross-origin now).
+    const socket = socketRef.current;
+    const myId = myIdRef.current;
+    const signaling: RoomSignaling | undefined =
+      socket && myId
+        ? {
+            myId,
+            send: (msg, to) => socket.sendSignal(msg as Record<string, unknown>, to),
+            onMessage: (cb) => socket.addSignalHandler((from, data) => cb(from, data)),
+          }
+        : undefined;
     const net = new RoomNetwork(roomId, {
       onPeers: (peers) => setRealPeers(peers.filter((p) => p.connected)),
       onSendProgress: (id, name, sent, total) => {
@@ -510,7 +522,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       onReceiveStart: (id, name, size) => upsertRealTransfer(id, name, size, 0, "down"),
       onReceiveProgress: (id, received, total) => upsertRealTransfer(id, "receiving…", total, (received / total) * 100, "down"),
       onReceiveComplete: (file) => addReceivedFile(file),
-    });
+    }, signaling);
     networkRef.current = net;
     net.start();
     return () => {

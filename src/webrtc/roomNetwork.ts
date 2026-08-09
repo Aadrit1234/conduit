@@ -24,6 +24,30 @@ export type RoomNetworkHandlers = {
   onReceiveComplete(file: ReceivedFile): void;
 };
 
+/**
+ * Pluggable signaling transport for the WebRTC mesh.
+ *
+ * The real app rides the server's opaque `signal` relay (server/src/ws.ts
+ * forwards it without inspecting it), so peers on different devices and
+ * browsers find each other — this is what makes P2P file transfer work
+ * outside a single browser. A same-origin BroadcastChannel is the fallback
+ * (two tabs of one browser with no backend), and the self-test uses a
+ * loopback pair.
+ *
+ * Every message carries its *sender's* id in `peerId`. Point-to-point
+ * messages (offer/answer/ice) also carry `to` (the recipient's id) and the
+ * transport must deliver them only to that peer. Broadcast messages
+ * (hello / bye) have no `to` and reach every other member.
+ */
+export type RoomSignaling = {
+  /** My identity as known to the transport (the WS peerId in the real app). */
+  myId: string;
+  /** Send a signaling message, optionally to one specific peer. */
+  send(msg: object, to?: string): void;
+  /** Subscribe to inbound signaling. Returns an unsubscribe function. */
+  onMessage(cb: (from: string, msg: object) => void): () => void;
+};
+
 /* ================= internal types ================= */
 
 type MetaMsg = {
@@ -51,12 +75,39 @@ type PeerRecord = {
   recvChunks: Map<number, { meta: MetaMsg; chunks: ArrayBuffer[]; received: number }>;
 };
 
+/** Public STUN — enough for most NATs; set VITE_ICE_SERVERS to add TURN. */
+function defaultIceServers(): RTCIceServer[] {
+  return [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun.cloudflare.com:3478" },
+  ];
+}
+
+/**
+ * ICE servers from VITE_ICE_SERVERS (JSON array of RTCIceServer, e.g.
+ * `[{"urls":"turn:turn.example.com:3478","username":"u","credential":"p"}]`).
+ * Falls back to public STUN when unset or malformed.
+ */
+function iceServers(): RTCIceServer[] {
+  const raw = import.meta.env.VITE_ICE_SERVERS;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as RTCIceServer[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      console.warn("[conduit] VITE_ICE_SERVERS is not valid JSON — using public STUN");
+    }
+  }
+  return defaultIceServers();
+}
+
 /* ================= the mesh ================= */
 
 /**
- * Connects every tab that has joined the same room code into a full WebRTC mesh.
- * Signaling rides a same-origin BroadcastChannel (no server needed), then file
- * transfers flow peer-to-peer over ordered DataChannels.
+ * Connects every member of the same room into a full WebRTC mesh. Signaling
+ * rides a pluggable transport (the server's `signal` relay by default, or a
+ * same-origin BroadcastChannel), then file transfers flow peer-to-peer over
+ * ordered DataChannels with SHA-256 verification.
  */
 export class RoomNetwork {
   readonly roomCode: string;
@@ -64,24 +115,32 @@ export class RoomNetwork {
   readonly myName: string;
 
   private channel: BroadcastChannel | null = null;
+  private signaling: RoomSignaling | null;
+  private unsubSignal: (() => void) | null = null;
   private peers = new Map<string, PeerRecord>();
   private handlers: RoomNetworkHandlers;
   private nextTransfer = (Date.now() & 0xffffffff) >>> 0;
   private stopped = false;
 
-  constructor(roomCode: string, handlers: RoomNetworkHandlers) {
+  constructor(roomCode: string, handlers: RoomNetworkHandlers, signaling?: RoomSignaling) {
     this.roomCode = roomCode.trim().toUpperCase();
     this.handlers = handlers;
+    this.signaling = signaling ?? null;
 
-    // Stable per-tab identity so StrictMode remounts don't re-negotiate with themselves.
-    const key = `conduit-peer-${this.roomCode}`;
-    let id = sessionStorage.getItem(key);
-    if (!id) {
-      id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 12);
-      sessionStorage.setItem(key, id);
+    if (signaling) {
+      this.myId = signaling.myId;
+      this.unsubSignal = signaling.onMessage((_from, msg) => this.handleSignal(msg));
+    } else {
+      // Stable per-tab identity so StrictMode remounts don't re-negotiate with themselves.
+      const key = `conduit-peer-${this.roomCode}`;
+      let id = sessionStorage.getItem(key);
+      if (!id) {
+        id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 12);
+        sessionStorage.setItem(key, id);
+      }
+      this.myId = id;
     }
-    this.myId = id;
-    this.myName = `Tab·${id.slice(-4).toUpperCase()}`;
+    this.myName = `Tab·${this.myId.slice(-4).toUpperCase()}`;
   }
 
   get peerList(): Peer[] {
@@ -93,10 +152,15 @@ export class RoomNetwork {
   }
 
   start() {
-    if (typeof BroadcastChannel === "undefined" || typeof RTCPeerConnection === "undefined") return;
+    if (typeof RTCPeerConnection === "undefined") return;
+    window.addEventListener("beforeunload", this.announceBye);
+    if (this.signaling) {
+      this.post({ type: "rtc-hello", peerId: this.myId, name: this.myName });
+      return;
+    }
+    if (typeof BroadcastChannel === "undefined") return;
     this.channel = new BroadcastChannel(`conduit-room:${this.roomCode}`);
     this.channel.onmessage = (ev: MessageEvent) => this.handleSignal(ev.data);
-    window.addEventListener("beforeunload", this.announceBye);
     this.post({ type: "rtc-hello", peerId: this.myId, name: this.myName });
   }
 
@@ -104,6 +168,8 @@ export class RoomNetwork {
     this.stopped = true;
     this.announceBye();
     window.removeEventListener("beforeunload", this.announceBye);
+    this.unsubSignal?.();
+    this.unsubSignal = null;
     this.channel?.close();
     this.channel = null;
     for (const p of this.peers.values()) p.pc?.close();
@@ -257,16 +323,17 @@ export class RoomNetwork {
 
   /* ---------- signaling ---------- */
 
-  private post(msg: object) {
-    this.channel?.postMessage(msg);
+  private post(msg: object, to?: string) {
+    if (this.signaling) this.signaling.send(msg, to);
+    else this.channel?.postMessage(msg);
   }
 
   private handleSignal(msg: any) {
-    // Note: BroadcastChannel never delivers a message to the context that posted
-    // it, so there are no self-messages to filter. Point-to-point messages
-    // (offer/answer/ice) carry the *recipient's* peerId, so we must NOT drop
-    // messages whose peerId matches our own.
-    if (!msg || typeof msg !== "object") return;
+    // Every message carries the sender's id in `peerId`. Never process our own.
+    if (!msg || typeof msg !== "object" || msg.peerId === this.myId) return;
+    // Point-to-point messages carry the recipient's id in `to` — the transport
+    // should have routed them already; this is a defensive double-check.
+    if (msg.to && msg.to !== this.myId) return;
     switch (msg.type) {
       case "rtc-hello":
         this.ensurePeer(msg.peerId, msg.name);
@@ -320,10 +387,10 @@ export class RoomNetwork {
   }
 
   private createPeerConnection(peer: PeerRecord): RTCPeerConnection {
-    const pc = new RTCPeerConnection({ iceServers: [] });
+    const pc = new RTCPeerConnection({ iceServers: iceServers() });
     pc.onicecandidate = (ev) => {
       if (ev.candidate) {
-        this.post({ type: "rtc-ice", peerId: peer.id, candidate: ev.candidate.toJSON() });
+        this.post({ type: "rtc-ice", peerId: this.myId, to: peer.id, candidate: ev.candidate.toJSON() });
       }
     };
     pc.onconnectionstatechange = () => {
@@ -348,7 +415,7 @@ export class RoomNetwork {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     if (pc.localDescription) {
-      this.post({ type: "rtc-offer", peerId: peer.id, sdp: pc.localDescription });
+      this.post({ type: "rtc-offer", peerId: this.myId, to: peer.id, sdp: pc.localDescription });
     }
   }
 
@@ -362,7 +429,7 @@ export class RoomNetwork {
       const answer = await peer.pc.createAnswer();
       await peer.pc.setLocalDescription(answer);
       if (peer.pc.localDescription) {
-        this.post({ type: "rtc-answer", peerId: peer.id, sdp: peer.pc.localDescription });
+        this.post({ type: "rtc-answer", peerId: this.myId, to: peer.id, sdp: peer.pc.localDescription });
       }
     } catch (err) {
       console.warn("[conduit] answer failed", err);

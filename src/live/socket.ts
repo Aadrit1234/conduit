@@ -21,8 +21,6 @@ export type LiveSocketEvents = {
   onRoomUpdated?(room: LiveRoom): void;
   /** A member's role changed (admin action). */
   onRoleChanged?(peerId: string, role: "admin" | "member" | "viewer", members: ServerMember[]): void;
-  /** Peer-to-peer signaling (WebRTC mesh, E2EE key exchange) relayed by the server. */
-  onSignal?(from: string, data: Record<string, unknown>): void;
   onClose(): void;
 };
 
@@ -49,6 +47,8 @@ export class LiveRoomSocket {
   private ws: WebSocket | null = null;
   private closedByUs = false;
   private events: LiveSocketEvents;
+  /** Signaling consumers (E2EE key exchange, WebRTC mesh). */
+  private signalHandlers = new Set<(from: string, data: Record<string, unknown>) => void>();
 
   constructor(events: LiveSocketEvents) {
     this.events = events;
@@ -103,7 +103,7 @@ export class LiveRoomSocket {
             this.events.onFileAnnounce(msg.from, msg.meta);
             break;
           case "signal":
-            this.events.onSignal?.(msg.from, msg.data as Record<string, unknown>);
+            for (const handler of this.signalHandlers) handler(msg.from, msg.data as Record<string, unknown>);
             break;
           case "error":
             console.warn("[conduit] server:", msg.message);
@@ -143,9 +143,10 @@ export class LiveRoomSocket {
     this.ws?.send(JSON.stringify(to ? { type: "signal", to, data } : { type: "signal", data }));
   }
 
-  /** Attach a signal handler after construction (used by CryptoSession). */
-  setSignalHandler(handler: (from: string, data: Record<string, unknown>) => void): void {
-    this.events.onSignal = handler;
+  /** Subscribe to signaling relayed by the server. Returns an unsubscribe. */
+  addSignalHandler(handler: (from: string, data: Record<string, unknown>) => void): () => void {
+    this.signalHandlers.add(handler);
+    return () => this.signalHandlers.delete(handler);
   }
 
   close() {
