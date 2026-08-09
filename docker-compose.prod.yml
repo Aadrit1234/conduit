@@ -1,0 +1,22 @@
+# Production override — deploy prebuilt images from a registry instead of
+# building locally. The CI pipeline (see .github/workflows/ci.yml) pushes
+# `ghcr.io/<org>/conduit-frontend` and `conduit-backend`.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Set the image names via env (defaults below).
+services:
+  frontend:
+    image: ${CONDUIT_FRONTEND_IMAGE:-ghcr.io/your-org/conduit-frontend:latest}
+    build: !reset null
+    ports:
+      - "80:80"
+
+  backend:
+    image: ${CONDUIT_BACKEND_IMAGE:-ghcr.io/your-org/conduit-backend:latest}
+    build: !reset null
+    environment:
+      PORT: 8787
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://conduit:${POSTGRES_PASSWORD:-conduit}@db:5432/conduit

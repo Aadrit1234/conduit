@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>conduit e2ee test — running</title>
+  <style>
+    body { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; background: #0b0d14; color: #d7dce8; padding: 24px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h3>Conduit E2EE test</h3>
+  <pre id="out">booting…</pre>
+  <script type="module">
+    const out = document.getElementById("out");
+    const steps = [];
+    const report = (name, ok, detail = "") => {
+      steps.push(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`);
+      out.textContent = steps.join("\n");
+      document.title = `conduit-e2ee:${ok ? "pass" : "fail"}:${steps.length}`;
+    };
+    const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+
+    try {
+      const { x25519, vectors } = await import("/src/crypto/x25519.ts");
+      const { generateIdentity, encryptMessage, decryptMessage } = await import("/src/crypto/e2ee.ts");
+      const { LiveRoomSocket } = await import("/src/live/socket.ts");
+      const { CryptoSession } = await import("/src/live/cryptoSession.ts");
+
+      /* ---- 1. RFC 7748 §6.1 vectors ---- */
+      const base = new Uint8Array(32); base[0] = 9;
+      const pA = x25519(vectors.scalarA, base);
+      const pB = x25519(vectors.scalarB, base);
+      const shared = x25519(vectors.scalarA, pB);
+      report("x25519 public keys (RFC 7748)", hex(pA) === hex(vectors.publicA) && hex(pB) === hex(vectors.publicB),
+        `pubA ${hex(pA) === hex(vectors.publicA) ? "ok" : hex(pA)}`);
+      report("x25519 ECDH shared secret", hex(shared) === hex(vectors.shared), hex(shared).slice(0, 16) + "…");
+
+      /* ---- 2. real room over the live server ---- */
+      const created = await (await fetch("/rooms", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "ephemeral", ttlMinutes: 240 }),
+      })).json();
+      const code = created.room.code;
+
+      /* Connects a client and boots its CryptoSession on room.joined (as RoomDemo does). */
+      const connect = (name, isCreator, identity) =>
+        new Promise((resolve, reject) => {
+          const socket = new LiveRoomSocket({
+            onJoined: () => {}, onPresence: () => {}, onChat: () => {}, onTyping: () => {},
+            onFileAnnounce: () => {}, onClose: () => {},
+          });
+          let session = null;
+          let peerId = "";
+          let status = "negotiating";
+          let latestMembers = [];
+          const ready = new Promise((res) => {
+            const check = () => { if (status === "ready" && session) res(true); };
+            socket.events = {
+              ...socket.events,
+              onJoined: (id, members) => {
+                peerId = id;
+                latestMembers = members;
+                session = new CryptoSession({
+                  roomCode: code, socket, myPeerId: id, isCreator, identity, persist: false,
+                  onStatus: (st) => { status = st; check(); },
+                });
+                session.start();
+                for (const m of members) if (m.peerId !== id) session.onPeerJoined(m.peerId);
+              },
+              onPresence: (members) => {
+                latestMembers = members;
+                for (const m of members) if (m.peerId !== peerId) session?.onPeerJoined(m.peerId);
+              },
+            };
+            socket.connect(`ws://${location.host}/ws/rooms/${code}?name=${encodeURIComponent(name)}`)
+              .then(() => resolve({ socket, ready, get session() { return session; }, get peerId() { return peerId; }, get latestMembers() { return latestMembers; } }))
+              .catch(reject);
+          });
+        });
+
+      const idA = generateIdentity();
+      const idB = generateIdentity();
+      const idC = generateIdentity();
+
+      const clientA = await connect("Tab%3AE2EE-A", true, idA);
+      await clientA.ready;
+      report("creator A generates the room key", clientA.session.ready, "");
+
+      const clientB = await connect("Tab%3AE2EE-B", false, idB);
+      await clientB.ready;
+      report("member B receives the wrapped key via server relay", clientB.session.ready, "");
+
+      /* ---- 3. encrypted chat — the server must never see plaintext ---- */
+      const plaintext = "top secret: the deploy key is under the doormat";
+      const cipher = await clientA.session.encrypt(plaintext);
+      report("encrypt emits gen-tagged ciphertext", /^2:\d+:/.test(cipher) && !cipher.includes(plaintext), cipher.slice(0, 24) + "…");
+
+      const gotAtB = new Promise((resolve) => {
+        clientB.socket.events = {
+          ...clientB.socket.events,
+          onChat: async (msg) => resolve(await clientB.session.decrypt(msg.payload)),
+        };
+      });
+      clientA.socket.sendChat(cipher);
+      const decryptedAtB = await gotAtB;
+      report("B decrypts A's message", decryptedAtB === plaintext, JSON.stringify(decryptedAtB));
+
+      const stored = (await (await fetch(`/rooms/${code}/messages`)).json()).messages ?? [];
+      const storedPayload = stored[0]?.payload ?? "";
+      report("server stores ciphertext only", /^2:\d+:/.test(storedPayload) && !storedPayload.includes(plaintext),
+        `stored=${storedPayload.slice(0, 24)}…`);
+
+      /* ---- 4. late joiner C gets the key and decrypts history ---- */
+      const clientC = await connect("Tab%3AE2EE-C", false, idC);
+      await clientC.ready;
+      report("late joiner C receives the room key", clientC.session.ready, "");
+      const history = (await (await fetch(`/rooms/${code}/messages`)).json()).messages ?? [];
+      const decryptedHistory = [];
+      for (const h of history) decryptedHistory.push(await clientC.session.decrypt(h.payload));
+      report("C decrypts persisted history", decryptedHistory.length === 1 && decryptedHistory[0] === plaintext,
+        JSON.stringify(decryptedHistory));
+
+      /* ---- 5. KEY ROTATION: C leaves, creator rotates, B gets the new gen ---- */
+      const preRotate = "pre-rotation message, still readable after rotation";
+      const gotPreAtB = new Promise((resolve) => {
+        clientB.socket.events = { ...clientB.socket.events, onChat: async (msg) => resolve(await clientB.session.decrypt(msg.payload)) };
+      });
+      clientA.socket.sendChat(await clientA.session.encrypt(preRotate));
+      report("pre-rotation message decrypts at B", (await gotPreAtB) === preRotate, "gen=" + clientB.session.activeGeneration);
+
+      // C leaves → the server broadcasts presence.leave → the creator rotates.
+      clientC.socket.close();
+      await new Promise((r) => setTimeout(r, 900));
+      clientA.session.onPeerLeft(clientC.peerId, clientA.latestMembers);
+      const rotated = await new Promise((resolve) => {
+        const t0 = Date.now();
+        const poll = () => {
+          if (clientB.session.activeGeneration >= 2) return resolve(true);
+          if (Date.now() - t0 > 6000) return resolve(false);
+          setTimeout(poll, 120);
+        };
+        poll();
+      });
+      report("creator rotates to gen 2, B receives it", rotated && clientB.session.activeGeneration === 2,
+        `activeGen=${clientB.session.activeGeneration}`);
+
+      const postRotate = "post-rotation secret: only current members can read this";
+      const gotPostAtB = new Promise((resolve) => {
+        clientB.socket.events = { ...clientB.socket.events, onChat: async (msg) => resolve({ text: await clientB.session.decrypt(msg.payload), raw: msg.payload }) };
+      });
+      clientA.socket.sendChat(await clientA.session.encrypt(postRotate));
+      const post = await gotPostAtB;
+      report("B decrypts post-rotation message (new gen)", post.text === postRotate && post.raw.startsWith("2:2:"),
+        `raw=${post.raw.slice(0, 10)}…`);
+
+      const stored2 = (await (await fetch(`/rooms/${code}/messages`)).json()).messages ?? [];
+      const lastPayload = stored2[stored2.length - 1]?.payload ?? "";
+      report("server stores rotated ciphertext (2:2:)", lastPayload.startsWith("2:2:"), lastPayload.slice(0, 12) + "…");
+
+      // Departed C still holds only gen 1 — it cannot decrypt the new message.
+      let departedBlocked = false;
+      try {
+        await clientC.session.decrypt(post.raw);
+      } catch {
+        departedBlocked = true;
+      }
+      report("departed C cannot decrypt post-rotation messages", departedBlocked,
+        departedBlocked ? "no key for generation 2" : "decrypted?!");
+      report("old-generation history still decrypts at B", (await clientB.session.decrypt(stored2[0].payload)) === plaintext,
+        "gen-1 history intact");
+
+      /* ---- 6. GCM authentication rejects tampering ---- */
+      let tamperDetected = false;
+      try {
+        const [, iv, ctB64] = cipher.split(":");
+        const ct = atob(ctB64);
+        const flipped = ct[0] === "0" ? "1" : "0";
+        await clientC.session.decrypt(`1:${iv}:${btoa(flipped + ct.slice(1))}`);
+      } catch {
+        tamperDetected = true;
+      }
+      report("GCM rejects tampered ciphertext", tamperDetected, "");
+
+      clientA.socket.close(); clientB.socket.close(); clientC.socket.close();
+      report("ALL", true, `${steps.length} steps`);
+    } catch (err) {
+      report("exception", false, String(err?.message ?? err));
+    }
+  </script>
+</body>
+</html>

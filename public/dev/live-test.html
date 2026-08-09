@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>conduit live test — running</title>
+  <style>
+    body { font: 14px/1.5 ui-monospace, Menlo, Consolas, monospace; background: #0b0d14; color: #d7dce8; padding: 24px; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h3>Conduit live client test</h3>
+  <pre id="out">booting…</pre>
+  <script type="module">
+    const out = document.getElementById("out");
+    const steps = [];
+    const report = (name, ok, detail = "") => {
+      steps.push(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " — " + detail : ""}`);
+      out.textContent = steps.join("\n");
+      document.title = `conduit-live:${ok ? "pass" : "fail"}:${steps.length}`;
+    };
+    const waitFor = (socket, event, timeout = 6000) =>
+      new Promise((resolve) => {
+        let settled = false;
+        const prev = socket.events[event];
+        socket.events = { ...socket.events, [event]: (...args) => { if (!settled) { settled = true; socket.events = { ...socket.events, [event]: prev }; resolve(args); } } };
+        setTimeout(() => { if (!settled) { settled = true; socket.events = { ...socket.events, [event]: prev }; resolve(["timeout"]); } }, timeout);
+      });
+
+    try {
+      const { createRoom, joinRoom } = await import("/src/live/api.ts");
+      const { LiveRoomSocket } = await import("/src/live/socket.ts");
+
+      // 1. create a room over the Vite proxy -> Fastify
+      const created = await createRoom("ephemeral", 240);
+      report("createRoom", !!created.room?.code && created.room.mode === "ephemeral",
+        `code=${created.room.code} mode=${created.room.mode} ttl=${created.room.ttlSeconds}s`);
+      const code = created.room.code;
+
+      // 2. first client joins over WebSocket
+      const socketA = new LiveRoomSocket({ onJoined: () => {}, onPresence: () => {}, onChat: () => {}, onTyping: () => {}, onFileAnnounce: () => {}, onClose: () => {} });
+      const joinedA = waitFor(socketA, "onJoined");
+      const connectA = socketA.connect(`ws://${location.host}/ws/rooms/${code}?name=Tab%3ATESTA`);
+      const [peerIdA, membersA, historyA] = await joinedA;
+      await connectA;
+      report("socketA room.joined", typeof peerIdA === "string",
+        `peerId=${String(peerIdA).slice(0, 8)}… members=${membersA?.length} history=${historyA?.length}`);
+      const myId = peerIdA;
+
+      // 3. send a chat message -> server persists + echoes with seq
+      const chatP = waitFor(socketA, "onChat");
+      socketA.sendChat("hello from browser client");
+      const [chat] = await chatP;
+      report("chat echo w/ seq", !!chat && chat.seq === 1 && chat.payload === "hello from browser client",
+        `seq=${chat?.seq} from=${chat?.from === myId} payload=${JSON.stringify(chat?.payload)}`);
+
+      // 4. arm presence, then second client joins -> fan-out + history on join
+      const presenceP = waitFor(socketA, "onPresence");
+      const socketB = new LiveRoomSocket({ onJoined: () => {}, onPresence: () => {}, onChat: () => {}, onTyping: () => {}, onFileAnnounce: () => {}, onClose: () => {} });
+      const joinedB = waitFor(socketB, "onJoined");
+      const connectB = socketB.connect(`ws://${location.host}/ws/rooms/${code}?name=Tab%3ATESTB`);
+      const [peerIdB, membersB, historyB] = await joinedB;
+      await connectB;
+      report("socketB joins w/ history", typeof peerIdB === "string" && historyB?.length === 1 && membersB?.length === 2,
+        `members=${membersB?.length} history=${historyB?.length} last=${JSON.stringify(historyB?.[0]?.payload)}`);
+      const [presence] = await presenceP;
+      report("presence fan-out", Array.isArray(presence) && presence.length === 2, `members=${presence?.length}`);
+
+      // 5. join via POST /rooms/:code/join (the demo's join path)
+      const joinedHttp = await joinRoom(code);
+      report("joinRoom HTTP", joinedHttp.room?.code === code, `code=${joinedHttp.room?.code}`);
+
+      // 6. typing relay from B -> A
+      const typingP = waitFor(socketA, "onTyping");
+      socketB.sendTyping(true);
+      const [typingFrom, typingActive] = await typingP;
+      report("typing relay", typingActive === true && typingFrom !== myId,
+        `from=${typingFrom === myId ? "self(filtered?)" : String(typingFrom).slice(0, 8)} active=${typingActive}`);
+
+      socketA.close();
+      socketB.close();
+      report("ALL", true, `${steps.length} steps`);
+    } catch (err) {
+      report("exception", false, String(err?.message ?? err));
+    }
+  </script>
+</body>
+</html>

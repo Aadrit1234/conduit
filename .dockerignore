@@ -1,0 +1,9 @@
+node_modules
+dist
+server
+public/dev
+.git
+.gitignore
+*.log
+.env
+.env.local
