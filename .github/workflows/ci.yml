@@ -62,14 +62,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute lowercase image prefix (GHCR requires lowercase)
+        run: echo "IMAGE_PREFIX=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Build & push frontend
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ lower(github.repository) }}-frontend:latest
-            ghcr.io/${{ lower(github.repository) }}-frontend:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-frontend:latest
+            ${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}
 
       - name: Build & push backend
         uses: docker/build-push-action@v6
@@ -77,8 +80,8 @@ jobs:
           context: ./server
           push: true
           tags: |
-            ghcr.io/${{ lower(github.repository) }}-backend:latest
-            ghcr.io/${{ lower(github.repository) }}-backend:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-backend:latest
+            ${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}
 
   deploy:
     name: Deploy to server
