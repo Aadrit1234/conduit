@@ -1,0 +1,30 @@
+# Render blueprint — deploy the Conduit backend (Fastify + WebSocket) with one click.
+#
+#   1. Create a free account at https://render.com
+#   2. Dashboard → New → Blueprint → paste https://github.com/Aadrit1234/conduit
+#   3. Render reads this file, builds ./server/Dockerfile and gives you an HTTPS URL.
+#
+# Point the Vercel frontend at it by setting the project env var
+#   VITE_API_BASE=https://<this-service>.onrender.com/
+# (then redeploy the frontend). WebSocket URLs are derived automatically (wss).
+#
+# Persistence: set DATABASE_URL on this service in the Render dashboard (e.g. a
+# Neon Postgres connection string). The server applies the schema and stores
+# rooms/history there; without it the backend falls back to an in-memory store.
+# Keep the connection string out of this file — reference it as a Render secret.
+#
+# Note: the free plan sleeps after 15 minutes idle and cold-starts on the next
+# request; upgrade for an always-on, low-latency room server.
+services:
+  - type: web
+    name: conduit-backend
+    runtime: docker
+    repo: https://github.com/Aadrit1234/conduit
+    dockerfilePath: ./server/Dockerfile
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8787
+      - key: HOST
+        value: 0.0.0.0
