@@ -1,5 +1,6 @@
 import { Boxes, Database, GitBranch, Globe, Layers, MonitorSmartphone, Rocket, Server, Workflow } from "lucide-react";
 import { Reveal } from "./Reveal";
+import { FoldIn } from "./FoldIn";
 
 const stack = [
   {
@@ -146,8 +147,9 @@ export function Architecture() {
         </Reveal>
 
         <div className="roadmap">
+          {/* alternate the fold direction so each card unfolds from a different crease */}
           {roadmap.map((r, i) => (
-            <Reveal key={r.phase} delay={i * 0.1}>
+            <FoldIn key={r.phase} delay={i * 0.12} from={i % 2 === 0 ? "top" : "bottom"}>
               <div className={`card roadmap-card ${r.state === "now" ? "roadmap-now" : ""}`}>
                 {r.state === "now" && <span className="roadmap-live"><span className="pulse-dot" /> in build</span>}
                 <div className="card-icon">
@@ -161,7 +163,7 @@ export function Architecture() {
                   ))}
                 </ul>
               </div>
-            </Reveal>
+            </FoldIn>
           ))}
         </div>
       </div>

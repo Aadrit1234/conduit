@@ -434,6 +434,42 @@
 
 .bento-card:hover h3 { transform: translateZ(16px); }
 
+/* ================= 3D fold-in reveal ================= */
+
+.fold-in {
+  perspective: 1200px;
+  --fold-delay: 0s;
+}
+
+.fold-in > * {
+  /* default: visible (fail-open) — the folded state only applies when armed */
+  transition: transform 0.95s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.45s ease;
+  transition-delay: var(--fold-delay);
+  will-change: transform;
+}
+
+.fold-in-armed > * {
+  transform-origin: top center;
+  opacity: 0;
+  transform: translateY(22px) scale(0.97) rotateX(-88deg);
+}
+
+.fold-in-armed.fold-in-bottom > * {
+  transform-origin: bottom center;
+  transform: translateY(-22px) scale(0.97) rotateX(88deg);
+}
+
+.fold-in-armed.fold-in-open > * {
+  opacity: 1;
+  transform: translateY(0) scale(1) rotateX(0deg);
+}
+
+.fold-in-reduce > * {
+  transition: none;
+  opacity: 1;
+  transform: none;
+}
+
 /* ================= Scroll-driven 3D reel ================= */
 
 .scroll-reel {
