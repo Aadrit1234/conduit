@@ -470,6 +470,41 @@
   transform: none;
 }
 
+/* ================= Word-by-word headline reveal ================= */
+
+.wr-word {
+  display: inline-block;
+  will-change: transform, filter, opacity;
+}
+
+.wr-word .grad-text { display: inline-block; }
+
+.wr-armed .wr-word {
+  opacity: 0;
+  transform: translateY(18px) scale(0.985);
+  filter: blur(10px);
+  transition:
+    opacity 0.65s ease,
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.65s ease;
+}
+
+.wr-armed.wr-in .wr-word {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wr-armed .wr-word,
+  .wr-armed.wr-in .wr-word {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}
+
 /* ================= Scroll-driven 3D reel ================= */
 
 .scroll-reel {

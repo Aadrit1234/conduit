@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Cable, FolderTree, HardDriveDownload, MessageSquare, Radio, ShieldCheck, Timer } from "lucide-react";
 import { Reveal } from "./Reveal";
 import { Tilt } from "./Tilt";
+import { WordReveal } from "./WordReveal";
 
 const grid = [
   {
@@ -52,9 +53,11 @@ export function Features() {
           <span className="section-kicker">
             <Cable size={13} /> Everything, one room
           </span>
-          <h2 className="section-title">
-            Files, data and chat — <span className="grad-text">one live canvas</span>
-          </h2>
+          <WordReveal
+            className="section-title"
+            text="Files, data and chat — one live canvas"
+            accent="one live canvas"
+          />
           <p className="section-sub">
             A room is a shared space where conversation and content occupy the same timeline. Nothing
             is siloed, nothing is out of sync.

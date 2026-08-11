@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, KeyRound } from "lucide-react";
 import { Magnetic } from "./Magnetic";
 import { Reveal } from "./Reveal";
+import { WordReveal } from "./WordReveal";
 
 export function CTA() {
   const navigate = useNavigate();
@@ -61,9 +62,11 @@ export function CTA() {
               <span className="badge">
                 <KeyRound size={13} /> No signup · Free during beta
               </span>
-              <h2 className="cta-title">
-                Your next room is <span className="grad-text">one click away</span>
-              </h2>
+              <WordReveal
+                className="cta-title"
+                text="Your next room is one click away"
+                accent="one click away"
+              />
               <p className="cta-sub">
                 Create a room, share the code, drop in your files. Everything else is real time.
               </p>

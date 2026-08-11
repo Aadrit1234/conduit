@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Eye, Fingerprint, KeyRound, Lock, Timer, XCircle } from "lucide-react";
 import { Reveal } from "./Reveal";
+import { WordReveal } from "./WordReveal";
 
 const caps = [
   {
@@ -38,9 +39,11 @@ export function Security() {
           <span className="section-kicker">
             <Lock size={13} /> Security & privacy
           </span>
-          <h2 className="section-title">
-            Encrypted in the browser, <span className="grad-text">invisible to us</span>
-          </h2>
+          <WordReveal
+            className="section-title"
+            text="Encrypted in the browser, invisible to us"
+            accent="invisible to us"
+          />
           <p className="section-sub">
             Conduit is built zero-knowledge by default. Chat and file contents never exist in
             plaintext outside your device.

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { FolderUp, Link2, MessagesSquare, Sparkles } from "lucide-react";
 import { Reveal } from "./Reveal";
+import { WordReveal } from "./WordReveal";
 
 const steps = [
   {
@@ -58,9 +59,11 @@ export function HowItWorks() {
           <span className="section-kicker">
             <Link2 size={13} /> The flow
           </span>
-          <h2 className="section-title">
-            From empty room to <span className="grad-text">living workspace</span>
-          </h2>
+          <WordReveal
+            className="section-title"
+            text="From empty room to living workspace"
+            accent="living workspace"
+          />
         </Reveal>
 
         <div className="steps">

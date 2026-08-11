@@ -1,6 +1,7 @@
 import { Boxes, Database, GitBranch, Globe, Layers, MonitorSmartphone, Rocket, Server, Workflow } from "lucide-react";
 import { Reveal } from "./Reveal";
 import { FoldIn } from "./FoldIn";
+import { WordReveal } from "./WordReveal";
 
 const stack = [
   {
@@ -84,9 +85,11 @@ export function Architecture() {
           <span className="section-kicker">
             <Layers size={13} /> Under the hood
           </span>
-          <h2 className="section-title">
-            An architecture that <span className="grad-text">scales with the room</span>
-          </h2>
+          <WordReveal
+            className="section-title"
+            text="An architecture that scales with the room"
+            accent="scales with the room"
+          />
         </Reveal>
 
         <div className="stack-grid">
