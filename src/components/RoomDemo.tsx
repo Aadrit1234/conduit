@@ -705,9 +705,21 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       onExit();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const networkFailure = err instanceof TypeError || /failed to fetch|networkerror|load failed|fetch failed/i.test(msg);
+      const notCreator = /403|invalid admin token/i.test(msg);
       setMessages((m) => [
         ...m,
-        { id: ++idRef.current, from: "conduit", text: `Couldn't burn the room: ${msg}. Rooms created before the admin-token update can't be burned — create a fresh one.`, file: null, t: fmtClock() },
+        {
+          id: ++idRef.current,
+          from: "conduit",
+          text: networkFailure
+            ? "Couldn't burn the room: the Conduit server isn't reachable. Check that the backend is running and try again."
+            : notCreator
+              ? "Couldn't burn the room: this browser isn't the room's creator, or the room predates burn permissions. Reload it from the tab that created it, or create a fresh room."
+              : `Couldn't burn the room: ${msg}.`,
+          file: null,
+          t: fmtClock(),
+        },
       ]);
     }
   }
