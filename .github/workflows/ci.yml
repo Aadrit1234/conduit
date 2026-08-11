@@ -85,9 +85,15 @@ jobs:
 
   deploy:
     name: Deploy to server
-    needs: docker
+    # Images are already pushed by the docker job on every main push, so a
+    # manual dispatch just pulls the latest and starts it — it must NOT need
+    # the docker job (which is skipped on workflow_dispatch, which would skip
+    # this job too).
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
 
@@ -97,7 +103,16 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
+          envs: CONDUIT_FRONTEND_IMAGE,CONDUIT_BACKEND_IMAGE,GITHUB_TOKEN
           script: |
+            set -e
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd ${{ secrets.DEPLOY_DIR }}
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+        env:
+          # The prod compose override defaults to placeholder image names;
+          # pass the real registry paths from this repo.
+          CONDUIT_FRONTEND_IMAGE: ghcr.io/${{ github.repository }}-frontend:latest
+          CONDUIT_BACKEND_IMAGE: ghcr.io/${{ github.repository }}-backend:latest
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
