@@ -678,13 +678,23 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
 
   async function burn() {
     const token = adminTokenRef.current;
-    if (!token) return;
+    if (!token) {
+      setMessages((m) => [
+        ...m,
+        { id: ++idRef.current, from: "conduit", text: "Only the creator's browser can burn this room — reload the room from the tab where you created it.", file: null, t: fmtClock() },
+      ]);
+      return;
+    }
     try {
       await burnRoom(roomId, token);
       sessionStorage.removeItem(`conduit-admin:${roomId}`);
       onExit();
-    } catch {
-      /* keep the room — token invalid or server unreachable */
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setMessages((m) => [
+        ...m,
+        { id: ++idRef.current, from: "conduit", text: `Couldn't burn the room: ${msg}. Rooms created before the admin-token update can't be burned — create a fresh one.`, file: null, t: fmtClock() },
+      ]);
     }
   }
 
