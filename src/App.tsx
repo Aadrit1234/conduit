@@ -7,6 +7,7 @@ import { Marquee } from "./components/Marquee";
 import { Features } from "./components/Features";
 import { HowItWorks } from "./components/HowItWorks";
 import { Security } from "./components/Security";
+import { ScrollReel } from "./components/ScrollReel";
 import { Architecture } from "./components/Architecture";
 import { CTA } from "./components/CTA";
 import { Footer } from "./components/Footer";
@@ -23,6 +24,7 @@ function Landing() {
         <Hero />
         <Marquee />
         <Features />
+        <ScrollReel />
         <HowItWorks />
         <Security />
         <Architecture />
