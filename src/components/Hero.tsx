@@ -3,6 +3,7 @@ import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, FolderUp, KeyRound, Lock, MessageSquare, Play, Users, Zap } from "lucide-react";
 import { Magnetic } from "./Magnetic";
+import { ScrambleText } from "./ScrambleText";
 
 const HeroScene = lazy(() => import("../three/HeroScene"));
 
@@ -12,6 +13,9 @@ const stats = [
   { value: 99.9, suffix: "%", label: "uptime", decimals: 1 },
   { value: 0, suffix: "KB", label: "chat stored server-side" },
 ];
+
+// Module-level so the scramble's effect deps stay referentially stable.
+const taglines = ["Move as one.", "Share anything.", "Stay private.", "Go live now.", "Zero setup."];
 
 const container = {
   hidden: {},
@@ -87,7 +91,7 @@ export function Hero() {
           <motion.h1 className="hero-title" variants={item}>
             Share files.
             <br />
-            <span className="grad-text">Move as one.</span>
+            <ScrambleText texts={taglines} className="grad-text" />
           </motion.h1>
 
           <motion.p className="hero-sub" variants={item}>
