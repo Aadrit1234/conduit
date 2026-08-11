@@ -172,8 +172,9 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
     }
     step("WebRTC mesh connected · datachannel open on both sides");
 
-    // 4. real file transfer A → B
-    const size = 2 * 1024 * 1024 + 12345; // awkward size to exercise chunking
+    // 4. real file transfer A → B (24 MB — over the old 20 MB demo cap, and an
+    //    awkward remainder, so the streaming chunk path is exercised end to end)
+    const size = 24 * 1024 * 1024 + 12345;
     const bytes = new Uint8Array(size);
     for (let i = 0; i < size; i++) bytes[i] = (i * 31 + (i >> 8)) % 256;
     const file = new File([bytes], "mesh-test.bin", { type: "application/octet-stream" });

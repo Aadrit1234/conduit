@@ -36,16 +36,17 @@ export async function sha256Hex(data: ArrayBuffer | Blob): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export async function readChunks(file: File, chunkSize = CHUNK_SIZE): Promise<ArrayBuffer[]> {
-  const chunks: ArrayBuffer[] = [];
+/** Streams a file's bytes as CHUNK_SIZE slices, one at a time, so sending a
+ * multi-GB file never holds the whole file in memory (unlike an eager array). */
+export async function* readFileChunks(file: File, chunkSize = CHUNK_SIZE): AsyncGenerator<ArrayBuffer> {
   for (let offset = 0; offset < file.size; offset += chunkSize) {
-    chunks.push(await file.slice(offset, Math.min(offset + chunkSize, file.size)).arrayBuffer());
+    yield await file.slice(offset, Math.min(offset + chunkSize, file.size)).arrayBuffer();
   }
-  return chunks;
 }
 
 export function fmtBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }

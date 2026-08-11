@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, encodeChunk, decodeChunk, isChunkFrame, sha256Hex, readChunks } from "./framing";
+import { CHUNK_SIZE, encodeChunk, decodeChunk, isChunkFrame, sha256Hex, readFileChunks } from "./framing";
 
 /* ================= public types ================= */
 
@@ -189,11 +189,12 @@ export class RoomNetwork {
     }
     if (targets.length === 0) return 0;
 
-    const [sha, chunks] = await Promise.all([sha256Hex(file), readChunks(file)]);
+    const sha = await sha256Hex(file);
+    const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
     let sent = 0;
     for (const peer of targets) {
       try {
-        await this.sendToPeer(peer, file, sha, chunks);
+        await this.sendToPeer(peer, file, sha, chunkCount);
         sent++;
       } catch (err) {
         console.warn("[conduit] p2p send failed", err);
@@ -202,7 +203,7 @@ export class RoomNetwork {
     return sent;
   }
 
-  private async sendToPeer(peer: PeerRecord, file: File, sha: string, chunks: ArrayBuffer[]) {
+  private async sendToPeer(peer: PeerRecord, file: File, sha: string, chunkCount: number) {
     const dc = peer.dc!;
     const id = this.nextTransfer++;
     peer.sendTransfers.set(id, { name: file.name, sent: 0, total: file.size });
@@ -215,12 +216,15 @@ export class RoomNetwork {
       size: file.size,
       mime: file.type || "application/octet-stream",
       sha256: sha,
-      chunks: chunks.length,
+      chunks: chunkCount,
       sender: this.myName,
     };
     dc.send(JSON.stringify(meta));
 
-    for (let i = 0; i < chunks.length; i++) {
+    // Stream slices from the File on demand instead of pre-loading every chunk,
+    // so a multi-GB transfer keeps a flat memory footprint.
+    let index = 0;
+    for await (const chunk of readFileChunks(file)) {
       // Backpressure: pause while the channel buffer is full.
       if (dc.bufferedAmount > 1.5 * 1024 * 1024) {
         await new Promise<void>((resolve) => {
@@ -231,14 +235,15 @@ export class RoomNetwork {
           dc.addEventListener("bufferedamountlow", onLow);
         });
       }
-      dc.send(encodeChunk(id, i, chunks[i]));
+      dc.send(encodeChunk(id, index, chunk));
       const rec = peer.sendTransfers.get(id);
       if (rec) {
-        rec.sent += chunks[i].byteLength;
+        rec.sent += chunk.byteLength;
         this.handlers.onSendProgress(id, rec.name, rec.sent, rec.total);
       }
+      index++;
     }
-    dc.send(JSON.stringify({ kind: "file-done", id, count: chunks.length } satisfies DoneMsg));
+    dc.send(JSON.stringify({ kind: "file-done", id, count: index } satisfies DoneMsg));
     peer.sendTransfers.delete(id);
   }
 

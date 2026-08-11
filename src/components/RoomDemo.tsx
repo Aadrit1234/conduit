@@ -48,7 +48,6 @@ const FILE_ICON: Record<string, typeof File> = {
 
 const AVATAR_COLORS = ["#7c5cff", "#22d3ee", "#ff5c9d", "#4ade80", "#fbbf24", "#f472b6"];
 
-const MAX_REAL_BYTES = 20 * 1024 * 1024;
 
 /* ================= tiny helpers ================= */
 
@@ -255,6 +254,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
   const decryptChain = useRef<Promise<void>>(Promise.resolve());
   const lockedQueueRef = useRef<{ id: number; payload: string }[]>([]);
   const knownPeersRef = useRef<Set<string>>(new Set());
+  const lastPctRef = useRef<Map<number, number>>(new Map());
 
   const roomId = useMemo(() => roomCode || "KX-7F2A", [roomCode]);
   const meshCount = realPeers.length;
@@ -466,6 +466,12 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
   function upsertRealTransfer(id: number, name: string, size: number, pct: number, dir: "up" | "down") {
     const key = `r-${id}`;
     const rounded = Math.min(Math.round(pct), 100);
+    // A large file emits one progress event per 64 KB chunk (~16k for 1 GB) —
+    // skip re-renders while the visible percentage hasn't moved.
+    const prev = lastPctRef.current.get(id);
+    if (prev !== undefined && prev === rounded && rounded < 100) return;
+    lastPctRef.current.set(id, rounded);
+    if (rounded >= 100) lastPctRef.current.delete(id);
     setTransfers((t) => {
       const existing = t.find((x) => x.key === key);
       if (existing) {
@@ -591,16 +597,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
   }
 
   async function handleFiles(files: File[]) {
-    const big = files.filter((f) => f.size > MAX_REAL_BYTES);
-    const ok = files.filter((f) => f.size <= MAX_REAL_BYTES);
-
-    for (const f of big) {
-      setMessages((m) => [
-        ...m,
-        { id: ++idRef.current, from: "you", text: `${f.name} is ${fmtBytes(f.size)} — over the ${fmtBytes(MAX_REAL_BYTES)} P2P demo cap. Cloud relay uploads land in Phase 2.`, file: null, t: fmtClock() },
-      ]);
-    }
-    if (ok.length === 0) return;
+    if (files.length === 0) return;
 
     const net = networkRef.current;
     if (!net) {
@@ -610,7 +607,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       ]);
       return;
     }
-    for (const f of ok) {
+    for (const f of files) {
       const sent = await net.sendFile(f);
       if (sent === 0) {
         setMessages((m) => [
