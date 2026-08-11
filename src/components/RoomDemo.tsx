@@ -48,6 +48,12 @@ const FILE_ICON: Record<string, typeof File> = {
 
 const AVATAR_COLORS = ["#7c5cff", "#22d3ee", "#ff5c9d", "#4ade80", "#fbbf24", "#f472b6"];
 
+/** How long a peer's typing indicator stays visible after its last update.
+ * Senders re-broadcast `typing: true` every ~1.5s while typing, so this
+ * comfortably covers the gap while still expiring when they stop, clear the
+ * field, or disconnect without sending a `typing: false`. */
+const TYPING_EXPIRE_MS = 4000;
+
 
 /* ================= tiny helpers ================= */
 
@@ -255,6 +261,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
   const lockedQueueRef = useRef<{ id: number; payload: string }[]>([]);
   const knownPeersRef = useRef<Set<string>>(new Set());
   const lastPctRef = useRef<Map<number, number>>(new Map());
+  const typingTimersRef = useRef<Map<string, number>>(new Map());
 
   const roomId = useMemo(() => roomCode || "KX-7F2A", [roomCode]);
   const meshCount = realPeers.length;
@@ -382,7 +389,24 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
         },
         onTyping(from, active) {
           if (from === myIdRef.current) return;
-          setTyping((t) => (active ? [...t.filter((x) => x !== from), from] : t.filter((x) => x !== from)));
+          const timers = typingTimersRef.current;
+          const existing = timers.get(from);
+          if (existing) window.clearTimeout(existing);
+          if (active) {
+            setTyping((t) => (t.includes(from) ? t : [...t, from]));
+            // Auto-expire even if the peer never sends `typing: false` (stops
+            // with text left in the box, closes the tab, loses connection…).
+            timers.set(
+              from,
+              window.setTimeout(() => {
+                timers.delete(from);
+                setTyping((t) => t.filter((x) => x !== from));
+              }, TYPING_EXPIRE_MS)
+            );
+          } else {
+            timers.delete(from);
+            setTyping((t) => t.filter((x) => x !== from));
+          }
         },
         onRoomUpdated: (room) => setLive((l) => (l ? { ...l, room } : l)),
         onRoleChanged: (peerId, role, members) => {
@@ -543,6 +567,8 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     return () => {
       socketRef.current?.close();
       socketRef.current = null;
+      for (const t of typingTimersRef.current.values()) window.clearTimeout(t);
+      typingTimersRef.current.clear();
     };
   }, []);
 
