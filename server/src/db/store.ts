@@ -6,6 +6,9 @@ export type CreateRoomInput = {
   ttlSeconds: number | null;
   keyBlob?: Buffer | null;
   name?: string;
+  /** Creator-only credential that gates burn/rename/mode changes. Persisted so it
+   * survives server restarts (in-memory tokens orphan every room on reboot). */
+  adminToken?: string;
 };
 
 export type UpdateRoomInput = {
@@ -43,6 +46,7 @@ export interface RoomStore {
   createRoom(input: CreateRoomInput): Promise<Room>;
   getRoomByCode(code: string): Promise<Room | null>;
   getRoomById(id: string): Promise<Room | null>;
+  getAdminToken(id: string): Promise<string | null>;
   updateRoom(id: string, input: UpdateRoomInput): Promise<Room>;
   deleteRoom(id: string): Promise<boolean>;
   /** Deletes rooms past their expiry; returns the ids removed. */

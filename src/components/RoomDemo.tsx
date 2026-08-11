@@ -452,9 +452,14 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       let res;
       if (code) {
         res = await joinRoom(code);
+        // A creator who reloads / deep-links back into their own room keeps burn
+        // / rename / mode powers: the token lives in sessionStorage (not the
+        // server), so it survives page reloads in this browser session.
+        adminTokenRef.current = sessionStorage.getItem(`conduit-admin:${code}`);
       } else {
         const created = await createRoom(mode);
         adminTokenRef.current = created.adminToken;
+        sessionStorage.setItem(`conduit-admin:${created.room.code}`, created.adminToken);
         res = created;
       }
       setRoomCode(res.room.code);
@@ -676,6 +681,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     if (!token) return;
     try {
       await burnRoom(roomId, token);
+      sessionStorage.removeItem(`conduit-admin:${roomId}`);
       onExit();
     } catch {
       /* keep the room — token invalid or server unreachable */

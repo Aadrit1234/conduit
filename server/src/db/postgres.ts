@@ -42,12 +42,20 @@ export class PostgresStore implements RoomStore {
         ? new Date(Date.now() + input.ttlSeconds * 1000)
         : null;
     const { rows } = await this.pool.query<RoomRow>(
-      `INSERT INTO rooms (code, mode, name, ttl_seconds, key_blob, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO rooms (code, mode, name, ttl_seconds, key_blob, admin_token, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, code, name, mode, ttl_seconds, key_blob, created_at, expires_at`,
-      [input.code, input.mode, input.name ?? "", input.ttlSeconds, input.keyBlob ?? Buffer.alloc(0), expiresAt]
+      [input.code, input.mode, input.name ?? "", input.ttlSeconds, input.keyBlob ?? Buffer.alloc(0), input.adminToken ?? null, expiresAt]
     );
     return this.toRoom(rows[0]);
+  }
+
+  async getAdminToken(id: string): Promise<string | null> {
+    const { rows } = await this.pool.query<{ admin_token: string | null }>(
+      `SELECT admin_token FROM rooms WHERE id = $1`,
+      [id]
+    );
+    return rows[0]?.admin_token ?? null;
   }
 
   async getRoomByCode(code: string): Promise<Room | null> {

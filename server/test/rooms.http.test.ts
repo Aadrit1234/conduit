@@ -97,6 +97,23 @@ test("burn requires the admin token, then the room is gone", async () => {
   await app.close();
 });
 
+test("admin token survives an app restart over the same store", async () => {
+  // Simulates a server reboot: the store persists, the process does not. The
+  // token is stored with the room, so the creator's burn powers must survive.
+  const store = new MemoryStore();
+  const first = buildApp({ store });
+  const created = await first.inject({ method: "POST", url: "/rooms", payload: { code: "REST01" } });
+  const { room, adminToken } = created.json();
+  await first.close();
+
+  const restarted = buildApp({ store });
+  const forbidden = await restarted.inject({ method: "DELETE", url: `/rooms/${room.code}` });
+  assert.equal(forbidden.statusCode, 403);
+  const burned = await restarted.inject({ method: "DELETE", url: `/rooms/${room.code}`, payload: { adminToken } });
+  assert.equal(burned.statusCode, 200);
+  await restarted.close();
+});
+
 test("message history endpoint returns persisted messages in seq order", async () => {
   const { app } = makeApp();
   await app.inject({ method: "POST", url: "/rooms", payload: { code: "HIST01" } });

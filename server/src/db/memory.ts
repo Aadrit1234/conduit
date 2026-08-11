@@ -16,6 +16,7 @@ type MessageRecord = {
 export class MemoryStore implements RoomStore {
   private rooms = new Map<string, RoomRecord>();
   private byCode = new Map<string, string>();
+  private adminTokens = new Map<string, string>();
   private messages = new Map<string, MessageRecord[]>();
 
   async createRoom(input: CreateRoomInput): Promise<Room> {
@@ -41,8 +42,13 @@ export class MemoryStore implements RoomStore {
     };
     this.rooms.set(id, room);
     this.byCode.set(input.code, id);
+    if (input.adminToken) this.adminTokens.set(id, input.adminToken);
     this.messages.set(id, []);
     return this.toPublic(room);
+  }
+
+  async getAdminToken(id: string): Promise<string | null> {
+    return this.adminTokens.get(id) ?? null;
   }
 
   async getRoomByCode(code: string): Promise<Room | null> {
@@ -73,6 +79,7 @@ export class MemoryStore implements RoomStore {
     if (!room) return false;
     this.rooms.delete(id);
     this.byCode.delete(room.code);
+    this.adminTokens.delete(id);
     this.messages.delete(id);
     return true;
   }

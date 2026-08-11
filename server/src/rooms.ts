@@ -56,10 +56,10 @@ type RoomPluginOptions = { store: RoomStore };
 
 export const roomsPlugin: FastifyPluginAsync<RoomPluginOptions> = async (app, opts) => {
   const { store } = opts;
-  // Admin tokens are intentionally in-memory for this scaffold: they gate the
-  // burn endpoint, which is ephemeral anyway. Swap for signed tokens (JWT/JWS)
-  // when permanent workspaces land.
-  const adminTokens = new Map<string, string>();
+  // Admin tokens are persisted with the room (see RoomStore.getAdminToken), so
+  // they survive server restarts — an in-memory map orphans every creator's
+  // burn/rename powers on reboot. Swap for signed tokens (JWT/JWS) when
+  // permanent workspaces land.
 
   app.post<{ Body: CreateBody }>("/rooms", async (req, reply) => {
     const mode: RoomMode = req.body?.mode === "permanent" ? "permanent" : "ephemeral";
@@ -69,12 +69,14 @@ export const roomsPlugin: FastifyPluginAsync<RoomPluginOptions> = async (app, op
       return reply.code(400).send({ error: "code must be 4-12 characters" });
     }
 
+    const adminToken = randomUUID();
     const room = await store.createRoom({
       code,
       name: req.body?.name?.trim().slice(0, 60) ?? "",
       mode,
       ttlSeconds: mode === "ephemeral" ? ttlMinutes * 60 : null,
       keyBlob: req.body?.keyBlob ? Buffer.from(req.body.keyBlob, "base64") : null,
+      adminToken, // persisted so burn/rename powers survive server restarts
     }).catch((err) => {
       // A unique-violation means the code is taken; anything else is a real store
       // failure (e.g. schema mismatch) and must not be masked as a collision.
@@ -89,8 +91,6 @@ export const roomsPlugin: FastifyPluginAsync<RoomPluginOptions> = async (app, op
       return reply.code(409).send({ error: `room code ${code} is taken` });
     }
 
-    const adminToken = randomUUID();
-    adminTokens.set(room.id, adminToken);
     return reply.code(201).send({ room, adminToken, wsUrl: `/ws/rooms/${room.code}` });
   });
 
@@ -127,7 +127,7 @@ export const roomsPlugin: FastifyPluginAsync<RoomPluginOptions> = async (app, op
     async (req, reply) => {
       const room = await findLiveRoom(store, req.params.code);
       if (!room) return reply.code(404).send({ error: "room not found" });
-      if (adminTokens.get(room.id) !== req.body?.adminToken) {
+      if ((await store.getAdminToken(room.id)) !== req.body?.adminToken) {
         return reply.code(403).send({ error: "invalid admin token" });
       }
       const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 60) : undefined;
@@ -149,11 +149,10 @@ export const roomsPlugin: FastifyPluginAsync<RoomPluginOptions> = async (app, op
     async (req, reply) => {
       const room = await findLiveRoom(store, req.params.code);
       if (!room) return reply.code(404).send({ error: "room not found" });
-      if (adminTokens.get(room.id) !== req.body?.adminToken) {
+      if ((await store.getAdminToken(room.id)) !== req.body?.adminToken) {
         return reply.code(403).send({ error: "invalid admin token" });
       }
       await store.deleteRoom(room.id);
-      adminTokens.delete(room.id);
       return { ok: true };
     }
   );

@@ -20,11 +20,15 @@ CREATE TABLE IF NOT EXISTS rooms (
   name         TEXT NOT NULL DEFAULT '',                      -- display name (empty = the code)
   mode         TEXT NOT NULL CHECK (mode IN ('ephemeral','permanent')),
   owner_id     UUID REFERENCES users(id),
+  admin_token  TEXT,                                          -- creator's burn/rename credential
   ttl_seconds  INT,                                           -- NULL for permanent
   key_blob     BYTEA NOT NULL DEFAULT ''::bytea,              -- encrypted room key (zero-knowledge)
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at   TIMESTAMPTZ                                    -- ephemeral destruction time
 );
+
+-- Idempotent migration for databases created before admin_token existed.
+ALTER TABLE rooms ADD COLUMN IF NOT EXISTS admin_token TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_rooms_code ON rooms (code);
 CREATE INDEX IF NOT EXISTS idx_rooms_expires_at ON rooms (expires_at);
