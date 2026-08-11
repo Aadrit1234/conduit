@@ -599,7 +599,9 @@
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* minmax(0, 1fr): fr tracks otherwise size to content min-content (the
+     scrollable code blocks), blowing the grid out past the container. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin-top: 64px;
 }
@@ -2097,7 +2099,7 @@
   .hero-visual { height: 460px; }
   .bento { grid-template-columns: repeat(2, 1fr); }
   .bento-wide { grid-column: span 1; }
-  .steps, .caps, .roadmap, .stack-grid { grid-template-columns: repeat(2, 1fr); }
+  .steps, .caps, .roadmap, .stack-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .room-body { grid-template-columns: 250px 1fr; }
   .members-panel { display: none; }
 }
@@ -2105,7 +2107,7 @@
 @media (max-width: 780px) {
   .nav-links { display: none; }
   .nav-burger { display: grid; }
-  .bento, .steps, .caps, .roadmap, .stack-grid { grid-template-columns: 1fr; }
+  .bento, .steps, .caps, .roadmap, .stack-grid { grid-template-columns: minmax(0, 1fr); }
   .footer-inner { grid-template-columns: 1fr 1fr; }
   .footer-brand { grid-column: 1 / -1; }
   .pipeline { flex-direction: column; padding: 26px; }
@@ -2122,6 +2124,9 @@
   .footer-inner { grid-template-columns: 1fr; }
   .setup-card { padding: 34px 24px; }
   .join-row { flex-direction: column; }
+  /* the nav CTA doesn't fit next to logo + theme + burger; the mobile menu
+     already ships its own full-width "Launch a room" CTA. */
+  .nav-actions .btn-primary { display: none; }
   .float-card { display: none; }
   .scroll-reel-panel-inner { padding: 26px 22px; }
   .scroll-reel-progress { right: 14px; }
