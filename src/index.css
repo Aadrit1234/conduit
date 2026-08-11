@@ -109,6 +109,41 @@ button {
 
 /* ---------- Global animated backdrop ---------- */
 
+/* soft glow that follows the pointer across the whole page */
+.cursor-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    700px circle at var(--spot-x, 50vw) var(--spot-y, 30vh),
+    rgba(124, 92, 255, 0.07),
+    transparent 65%
+  );
+}
+
+:root[data-theme="light"] .cursor-spotlight {
+  background: radial-gradient(
+    700px circle at var(--spot-x, 50vw) var(--spot-y, 30vh),
+    rgba(109, 74, 255, 0.06),
+    transparent 65%
+  );
+}
+
+/* thin gradient bar tracking scroll progress under the navbar */
+.nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform-origin: 0 50%;
+  background: var(--grad);
+  box-shadow: 0 0 14px rgba(124, 92, 255, 0.55);
+  z-index: 120;
+  pointer-events: none;
+}
+
 .backdrop {
   position: fixed;
   inset: 0;

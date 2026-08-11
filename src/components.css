@@ -142,6 +142,19 @@
   overflow: hidden;
 }
 
+/* cursor-following glow inside the hero (position fed by Hero.tsx onMouseMove) */
+.hero-spotlight {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    560px circle at var(--mx, 50%) var(--my, 40%),
+    rgba(124, 92, 255, 0.1),
+    transparent 60%
+  );
+}
+
 .hero-inner {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
@@ -375,9 +388,16 @@
 
 .h-full { height: 100%; }
 
-.bento-card { display: flex; flex-direction: column; min-height: 210px; }
+.bento-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 210px;
+  transform-style: preserve-3d;
+}
 
 .bento-card p { max-width: 52ch; }
+
+.bento-card h3 { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
 
 .card-glow {
   position: absolute;
@@ -388,6 +408,31 @@
 }
 
 .bento-card:hover .card-glow { opacity: 1; }
+
+/* cursor-tracking spotlight + depth pop (Tilt.tsx feeds --tilt-x/--tilt-y) */
+.bento-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    340px circle at var(--tilt-x, 50%) var(--tilt-y, 50%),
+    rgba(124, 92, 255, 0.13),
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.bento-card:hover::after { opacity: 1; }
+
+.bento-card:hover .card-icon {
+  transform: translateZ(30px) scale(1.12) rotate(-6deg);
+}
+
+.bento-card:hover h3 { transform: translateZ(16px); }
 
 /* ================= How it works ================= */
 
@@ -768,6 +813,30 @@
 .cta-btn { padding: 17px 36px; font-size: 16.5px; }
 
 .cta-hint { margin-top: 22px; font-size: 13px; color: var(--faint); }
+
+/* twinkling particles + floating shapes around the CTA box */
+.cta-stars,
+.cta-shapes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cta-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 12px 2px rgba(124, 92, 255, 0.55);
+}
+
+.cta-shape {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  opacity: 0.45;
+  box-shadow: 0 0 18px 2px rgba(124, 92, 255, 0.4);
+}
 
 /* ================= Footer ================= */
 
@@ -1931,6 +2000,26 @@
 
 :root[data-theme="light"] .cta-inner {
   background: linear-gradient(180deg, #ffffff, #e7ebf5);
+}
+
+:root[data-theme="light"] .hero-spotlight {
+  background: radial-gradient(
+    560px circle at var(--mx, 50%) var(--my, 40%),
+    rgba(109, 74, 255, 0.08),
+    transparent 60%
+  );
+}
+
+:root[data-theme="light"] .bento-card::after {
+  background: radial-gradient(
+    340px circle at var(--tilt-x, 50%) var(--tilt-y, 50%),
+    rgba(109, 74, 255, 0.1),
+    transparent 62%
+  );
+}
+
+:root[data-theme="light"] .cta-star {
+  box-shadow: 0 0 12px 2px rgba(109, 74, 255, 0.4);
 }
 
 :root[data-theme="light"] .mobile-menu {

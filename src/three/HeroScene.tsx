@@ -25,10 +25,13 @@ function ParticleField({ count = 1500 }: { count?: number }) {
     return arr;
   }, [count]);
 
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
     if (!points.current) return;
     points.current.rotation.y += delta * 0.02;
     points.current.rotation.x += delta * 0.006;
+    // gentle "breathing" so the field feels alive
+    const s = 1 + Math.sin(state.clock.elapsedTime * 0.4) * 0.03;
+    points.current.scale.setScalar(s);
   });
 
   return (
@@ -49,15 +52,22 @@ function ParticleField({ count = 1500 }: { count?: number }) {
 
 function CoreBlob() {
   const mesh = useRef<THREE.Mesh>(null);
+  const shell = useRef<THREE.Mesh>(null);
   const { theme } = useTheme();
   const light = theme === "light";
 
   useFrame((state) => {
-    if (!mesh.current) return;
-    mesh.current.rotation.y += 0.0018;
-    mesh.current.rotation.x += 0.0009;
-    const s = 1 + Math.sin(state.clock.elapsedTime * 0.5) * 0.05;
-    mesh.current.scale.setScalar(s);
+    if (mesh.current) {
+      mesh.current.rotation.y += 0.0018;
+      mesh.current.rotation.x += 0.0009;
+      const s = 1 + Math.sin(state.clock.elapsedTime * 0.5) * 0.05;
+      mesh.current.scale.setScalar(s);
+    }
+    // wireframe shell counter-rotates against the blob for a "gyroscope" feel
+    if (shell.current) {
+      shell.current.rotation.y -= 0.0032;
+      shell.current.rotation.z += 0.0014;
+    }
   });
 
   return (
@@ -74,11 +84,68 @@ function CoreBlob() {
           speed={2.2}
         />
       </mesh>
-      <mesh scale={1.35}>
+      <mesh ref={shell} scale={1.35}>
         <icosahedronGeometry args={[2.2, 3]} />
         <meshBasicMaterial color={light ? "#6d4aff" : "#7c5cff"} wireframe transparent opacity={light ? 0.22 : 0.12} />
       </mesh>
     </Float>
+  );
+}
+
+/* ---------- Orbiting satellites (data streaming into the core) ---------- */
+
+function SatelliteRing({
+  radius,
+  tilt,
+  speed,
+  color,
+  size = 0.12,
+  phase = 0,
+}: {
+  radius: number;
+  tilt: [number, number, number];
+  speed: number;
+  color: string;
+  size?: number;
+  phase?: number;
+}) {
+  const sat = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (!sat.current) return;
+    const t = state.clock.elapsedTime * speed + phase;
+    sat.current.position.set(Math.cos(t) * radius, 0, Math.sin(t) * radius);
+  });
+
+  return (
+    <group rotation={tilt}>
+      {/* faint orbital path */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[radius - 0.015, radius + 0.015, 96]} />
+        <meshBasicMaterial color={color} transparent opacity={0.16} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh ref={sat}>
+        <sphereGeometry args={[size, 24, 24]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2.6} roughness={0.2} />
+      </mesh>
+    </group>
+  );
+}
+
+function Satellites() {
+  const group = useRef<Group>(null);
+
+  useFrame((_state, delta) => {
+    if (!group.current) return;
+    group.current.rotation.y += delta * 0.06;
+  });
+
+  return (
+    <group ref={group}>
+      <SatelliteRing radius={3.1} tilt={[0.9, 0, 0.4]} speed={0.55} color="#22d3ee" size={0.1} />
+      <SatelliteRing radius={3.9} tilt={[1.5, 0.6, -0.3]} speed={-0.4} color="#7c5cff" size={0.13} phase={2.1} />
+      <SatelliteRing radius={4.6} tilt={[0.5, -0.9, 0.7]} speed={0.32} color="#ff5c9d" size={0.09} phase={4.3} />
+    </group>
   );
 }
 
@@ -185,6 +252,7 @@ export default function HeroScene() {
       <Rig>
         <CoreBlob />
         <DataRings />
+        <Satellites />
         <FloatingNodes />
         <ParticleField />
       </Rig>

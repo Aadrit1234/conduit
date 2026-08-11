@@ -1,6 +1,11 @@
 import { type ReactNode, type MouseEvent } from "react";
 import { motion, useMotionValue, useSpring, useReducedMotion } from "framer-motion";
 
+/**
+ * 3D perspective tilt with a cursor-following spotlight.
+ * Sets --tilt-x/--tilt-y (spotlight position) on the element so CSS can paint
+ * a radial glow that tracks the pointer inside the card.
+ */
 export function Tilt({
   children,
   className,
@@ -17,10 +22,12 @@ export function Tilt({
   const reduce = useReducedMotion();
 
   function onMove(e: MouseEvent<HTMLDivElement>) {
-    if (reduce) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width - 0.5;
     const py = (e.clientY - rect.top) / rect.height - 0.5;
+    e.currentTarget.style.setProperty("--tilt-x", `${(e.clientX - rect.left).toFixed(0)}px`);
+    e.currentTarget.style.setProperty("--tilt-y", `${(e.clientY - rect.top).toFixed(0)}px`);
+    if (reduce) return;
     ry.set(px * max * 2);
     rx.set(-py * max * 2);
   }

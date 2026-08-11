@@ -48,9 +48,24 @@ const fadeIn = {
   transition: { duration: 0.4, ease: "easeOut" as const },
 };
 
+function CursorSpotlight() {
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      // set synchronously — no rAF, so the glow tracks the pointer even in
+      // throttled/backgrounded tabs where requestAnimationFrame is paused
+      document.documentElement.style.setProperty("--spot-x", `${e.clientX}px`);
+      document.documentElement.style.setProperty("--spot-y", `${e.clientY}px`);
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
+  }, []);
+  return <div className="cursor-spotlight" aria-hidden="true" />;
+}
+
 export default function App() {
   return (
     <>
+      <CursorSpotlight />
       <div className="backdrop" aria-hidden="true">
         <div className="noise" />
         <div className="backdrop-grid" />

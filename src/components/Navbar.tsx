@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Menu, X, Radio } from "lucide-react";
@@ -16,9 +16,28 @@ export function Navbar() {
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const progressRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll();
 
   useMotionValueEvent(scrollY, "change", (v) => setScrolled(v > 24));
+
+  // Written synchronously on the scroll event (no rAF), so the bar tracks
+  // scrolling even in throttled/backgrounded tabs.
+  useEffect(() => {
+    const onScroll = () => {
+      const el = progressRef.current;
+      if (!el) return;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      el.style.transform = `scaleX(${max > 0 ? Math.min(window.scrollY / max, 1) : 0})`;
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -29,6 +48,7 @@ export function Navbar() {
 
   return (
     <>
+      <div ref={progressRef} className="nav-progress" aria-hidden="true" />
       <motion.header
         initial={{ y: -80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}

@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent } from "react";
+import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, FolderUp, KeyRound, Lock, MessageSquare, Play, Users, Zap } from "lucide-react";
 import { Magnetic } from "./Magnetic";
@@ -51,6 +51,21 @@ function Counter({ value, suffix, decimals = 0 }: { value: number; suffix: strin
 export function Hero() {
   const navigate = useNavigate();
   const [code, setCode] = useState("");
+  const sectionRef = useRef<HTMLElement>(null);
+  const reduce = useReducedMotion();
+
+  // scroll-driven parallax: copy drifts up & fades, the 3D scene sinks & scales
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end start"] });
+  const copyY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -110]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.65], [1, 0]);
+  const visualY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 130]);
+  const visualScale = useTransform(scrollYProgress, [0, 1], [1, reduce ? 1 : 0.84]);
+
+  function onMove(e: MouseEvent<HTMLElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.style.setProperty("--mx", `${e.clientX - rect.left}px`);
+    e.currentTarget.style.setProperty("--my", `${e.clientY - rect.top}px`);
+  }
 
   function join() {
     const trimmed = code.trim().toUpperCase();
@@ -58,9 +73,10 @@ export function Hero() {
   }
 
   return (
-    <section className="hero" id="top">
+    <section className="hero" id="top" ref={sectionRef} onMouseMove={onMove}>
+      <div className="hero-spotlight" aria-hidden="true" />
       <div className="container hero-inner">
-        <motion.div className="hero-copy" variants={container} initial="hidden" animate="show">
+        <motion.div className="hero-copy" variants={container} initial="hidden" animate="show" style={{ y: copyY, opacity: copyOpacity }}>
           <motion.div variants={item}>
             <span className="badge">
               <span className="pulse-dot" />
@@ -114,7 +130,7 @@ export function Hero() {
           </motion.div>
         </motion.div>
 
-        <div className="hero-visual">
+        <motion.div className="hero-visual" style={{ y: visualY, scale: visualScale }}>
           <Suspense fallback={<div className="hero-visual-fallback"><motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.6, repeat: Infinity }}>rendering 3D room…</motion.div></div>}>
             <HeroScene />
           </Suspense>
@@ -186,7 +202,7 @@ export function Hero() {
               <div className="fc-sub"><Users size={11} /> room · KX-7F2A</div>
             </div>
           </motion.div>
-        </div>
+        </motion.div>
       </div>
 
       <div className="hero-scroll">
