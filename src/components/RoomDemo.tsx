@@ -5,12 +5,12 @@ import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, ClipboardCopy,
   File, FileArchive, FileCode, FileSpreadsheet, FileText, FileVideo,
   Folder, FolderOpen, FolderPlus, HardDrive, Image as ImageIcon, Loader2,
-  Lock, Paperclip, Play, Radio, RotateCcw, Send, Settings, Shield, Smile, Trash2, Upload, Users, Wifi, WifiOff, X, Zap,
+  Lock, Paperclip, Play, Radio, RotateCcw, Send, Settings, Shield, Smile, Trash2, Upload, User, Users, Wifi, WifiOff, X, Zap,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { RoomNetwork, type ReceivedFile, type Peer, type RoomSignaling } from "../webrtc/roomNetwork";
 import { fmtBytes } from "../webrtc/framing";
-import { createRoom, joinRoom, burnRoom, updateRoom, wsUrlFor, guestName, type LiveRoom } from "../live/api";
+import { createRoom, joinRoom, burnRoom, updateRoom, wsUrlFor, guestName, savedName, rememberName, type LiveRoom } from "../live/api";
 import { LiveRoomSocket, type ServerMember } from "../live/socket";
 import { CryptoSession, type E2eeStatus } from "../live/cryptoSession";
 import { RoomSettings, ROLE_LABEL, type MemberRole } from "./RoomSettings";
@@ -81,15 +81,17 @@ function peerShort(name: string) {
 
 /* ================= Room: setup screen ================= */
 
-function SetupScreen({ onEnter, onBack }: { onEnter: (mode: "ephemeral" | "permanent", code: string) => void; onBack: () => void }) {
+function SetupScreen({ onEnter, onBack }: { onEnter: (mode: "ephemeral" | "permanent", code: string, name: string) => void; onBack: () => void }) {
   const [mode, setMode] = useState<"ephemeral" | "permanent">("ephemeral");
   const [code, setCode] = useState("");
+  const [name, setName] = useState<string>(() => savedName() || guestName());
   const [joining, setJoining] = useState(false);
 
   function enter() {
     const finalCode = code.trim().toUpperCase();
+    rememberName(name);
     setJoining(true);
-    setTimeout(() => onEnter(mode, finalCode), 500);
+    setTimeout(() => onEnter(mode, finalCode, name.trim() || guestName()), 500);
   }
 
   return (
@@ -112,6 +114,18 @@ function SetupScreen({ onEnter, onBack }: { onEnter: (mode: "ephemeral" | "perma
             <span className="grad-text">New room</span>, in seconds
           </h2>
           <p className="setup-sub">Choose how long your room lives. The code is all your teammates need.</p>
+
+          <div className="setup-name">
+            <User size={15} />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 40))}
+              placeholder="Your name"
+              maxLength={40}
+              spellCheck={false}
+              aria-label="Your name"
+            />
+          </div>
 
           <div className="mode-switch">
             <motion.button
@@ -275,7 +289,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     if (!initialCode || autoJoinedRef.current || phase !== "setup") return;
     autoJoinedRef.current = true;
     setPhase("connecting");
-    void enterRoom("ephemeral", initialCode);
+    void enterRoom("ephemeral", initialCode, savedName() || guestName());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialCode]);
 
@@ -445,7 +459,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     });
   }
 
-  async function enterRoom(mode: "ephemeral" | "permanent", code: string) {
+  async function enterRoom(mode: "ephemeral" | "permanent", code: string, name: string) {
     autoJoinedRef.current = true;
     setErrorMsg("");
     try {
@@ -465,7 +479,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       setRoomCode(res.room.code);
       navigate(`/room/${res.room.code}`, { replace: true });
       setPhase("connecting");
-      if (await connectLive(res.room.code, wsUrlFor(res.room.code, guestName()))) {
+      if (await connectLive(res.room.code, wsUrlFor(res.room.code, name))) {
         setPhase("live");
         return;
       }
@@ -487,7 +501,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       return;
     }
     setPhase("connecting");
-    void enterRoom("ephemeral", roomCode);
+    void enterRoom("ephemeral", roomCode, savedName() || guestName());
   }
 
   /* ---------- real WebRTC mesh ---------- */
@@ -786,7 +800,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
 
   /* ---------- setup ---------- */
   if (phase === "setup") {
-    return <SetupScreen onBack={onExit} onEnter={(mode, c) => void enterRoom(mode, c)} />;
+    return <SetupScreen onBack={onExit} onEnter={(mode, c, name) => void enterRoom(mode, c, name)} />;
   }
 
   /* ---------- live room ---------- */

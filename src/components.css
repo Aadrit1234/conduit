@@ -1140,6 +1140,38 @@
 .setup-title { font-size: 30px; margin-bottom: 10px; }
 .setup-sub { color: var(--muted); font-size: 14.5px; margin: 0 0 28px; }
 
+.setup-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0 14px;
+  margin-bottom: 14px;
+  text-align: left;
+  transition: border-color 0.25s ease;
+}
+
+.setup-name:focus-within { border-color: rgba(124, 92, 255, 0.6); }
+
+.setup-name svg { color: var(--faint); flex-shrink: 0; }
+
+.setup-name input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 13px 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.setup-name input::placeholder { color: var(--faint); font-weight: 500; }
+
 .mode-switch {
   display: flex;
   flex-direction: column;

@@ -82,3 +82,22 @@ export function guestName(): string {
   }
   return `Tab·${id.slice(-4).toUpperCase()}`;
 }
+
+/** The display name the user last entered, if any. */
+export function savedName(): string {
+  try {
+    return (localStorage.getItem("conduit-name") ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+/** Remember the display name for the next room session. */
+export function rememberName(name: string) {
+  try {
+    const clean = name.trim().slice(0, 40);
+    if (clean) localStorage.setItem("conduit-name", clean);
+  } catch {
+    /* storage unavailable (private mode) — skip persistence */
+  }
+}
