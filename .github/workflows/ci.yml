@@ -89,15 +89,17 @@ jobs:
     # Every main push redeploys the Render backend through its deploy hook
     # (https://render.com/docs/deploy-hooks) once tests pass, so the live API
     # stays in sync without manual clicks. Skipped until the
-    # RENDER_DEPLOY_HOOK secret is set, so CI stays green meanwhile.
+    # RENDER_DEPLOY_HOOK secret is set, so CI stays green meanwhile. The secret
+    # is routed through job env because the secrets context isn't allowed in
+    # `if:` conditions.
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
     steps:
       - name: Trigger Render deploy hook
-        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
-        env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        if: ${{ env.RENDER_DEPLOY_HOOK != '' }}
         run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
 
   deploy:
