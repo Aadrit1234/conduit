@@ -6,6 +6,9 @@ export type Peer = { id: string; name: string; connected: boolean };
 
 export type ReceivedFile = {
   id: string;
+  /** Path relative to the sender's drop root — `report.pdf` for a plain file,
+   * `photos/2024/img1.jpg` for a file inside a dropped folder. */
+  path: string;
   name: string;
   size: number;
   mime: string;
@@ -53,6 +56,9 @@ export type RoomSignaling = {
 type MetaMsg = {
   kind: "file-meta";
   id: number;
+  /** Relative path from the drop root — the receiver rebuilds the folder
+   * tree from this. Always present; equals `name` for top-level files. */
+  path: string;
   name: string;
   size: number;
   mime: string;
@@ -179,7 +185,7 @@ export class RoomNetwork {
 
   /* ---------- file transfer ---------- */
 
-  async sendFile(file: File): Promise<number> {
+  async sendFile(file: File, path?: string): Promise<number> {
     const open = () =>
       [...this.peers.values()].filter((p) => p.connected && p.dc && p.dc.readyState === "open");
     let targets = open();
@@ -194,7 +200,7 @@ export class RoomNetwork {
     let sent = 0;
     for (const peer of targets) {
       try {
-        await this.sendToPeer(peer, file, sha, chunkCount);
+        await this.sendToPeer(peer, file, sha, chunkCount, path);
         sent++;
       } catch (err) {
         console.warn("[conduit] p2p send failed", err);
@@ -203,7 +209,7 @@ export class RoomNetwork {
     return sent;
   }
 
-  private async sendToPeer(peer: PeerRecord, file: File, sha: string, chunkCount: number) {
+  private async sendToPeer(peer: PeerRecord, file: File, sha: string, chunkCount: number, relPath?: string) {
     const dc = peer.dc!;
     const id = this.nextTransfer++;
     peer.sendTransfers.set(id, { name: file.name, sent: 0, total: file.size });
@@ -212,6 +218,7 @@ export class RoomNetwork {
     const meta: MetaMsg = {
       kind: "file-meta",
       id,
+      path: relPath || file.name,
       name: file.name,
       size: file.size,
       mime: file.type || "application/octet-stream",
@@ -315,6 +322,7 @@ export class RoomNetwork {
     const actual = await sha256Hex(blob);
     this.handlers.onReceiveComplete({
       id: String(done.id),
+      path: t.meta.path,
       name: t.meta.name,
       size: t.meta.size,
       mime: t.meta.mime,

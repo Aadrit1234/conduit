@@ -3,13 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowDown, ArrowLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, ClipboardCopy,
-  File, FileArchive, FileCode, FileSpreadsheet, FileText, FileVideo,
+  File, FileArchive, FileCode, FilePlus, FileSpreadsheet, FileText, FileVideo,
   Folder, FolderOpen, FolderPlus, HardDrive, Image as ImageIcon, Loader2,
   Lock, Paperclip, Play, Radio, RotateCcw, Send, Settings, Shield, Smile, Trash2, Upload, User, Users, Wifi, WifiOff, X, Zap,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { RoomNetwork, type ReceivedFile, type Peer, type RoomSignaling } from "../webrtc/roomNetwork";
-import { fmtBytes } from "../webrtc/framing";
+import { collectDroppedFiles, fmtBytes, type DropFile } from "../webrtc/framing";
 import { createRoom, joinRoom, burnRoom, updateRoom, wsUrlFor, guestName, savedName, rememberName, type LiveRoom } from "../live/api";
 import { LiveRoomSocket, type ServerMember } from "../live/socket";
 import { CryptoSession, type E2eeStatus } from "../live/cryptoSession";
@@ -271,6 +271,8 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
   const lastTypingRef = useRef(0);
   const autoJoinedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const folderIdRef = useRef(0);
   const decryptChain = useRef<Promise<void>>(Promise.resolve());
   const lockedQueueRef = useRef<{ id: number; payload: string }[]>([]);
   const knownPeersRef = useRef<Set<string>>(new Set());
@@ -524,6 +526,30 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     });
   }
 
+  /** Inserts a file into the tree at `segments` (a folder path), creating
+   * folder nodes on demand — files from a folder drop rebuild the sender's
+   * folder structure. */
+  function treeWithPath(tree: TreeItem[], segments: string[], leaf: TreeItem): TreeItem[] {
+    if (segments.length === 0) return [...tree, leaf];
+    const [head, ...rest] = segments;
+    const idx = tree.findIndex((n) => n.type === "folder" && n.name === head);
+    if (idx >= 0) {
+      const copy = [...tree];
+      const existing = copy[idx];
+      copy[idx] = { ...existing, children: treeWithPath(existing.children ?? [], rest, leaf) };
+      return copy;
+    }
+    return [
+      ...tree,
+      {
+        id: `dir-${folderIdRef.current++}`,
+        name: head,
+        type: "folder",
+        children: treeWithPath([], rest, leaf),
+      },
+    ];
+  }
+
   function addReceivedFile(file: ReceivedFile) {
     const key = `r-${file.id}`;
     setTransfers((t) => t.map((x) => (x.key === key ? { ...x, pct: 100, done: true, note: file.verified ? "hash verified" : "hash mismatch!" } : x)));
@@ -532,7 +558,10 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     const kind = kindFromMime(file.mime);
     const url = URL.createObjectURL(file.blob);
     const item: TreeItem = { id: `rx-${file.id}`, name: file.name, type: "file", kind, size: fmtBytes(file.size), p2p: true, blobUrl: url, verified: file.verified };
-    setTree((t) => [...t, item]);
+    // The relative path carries the folder structure — e.g. `photos/2024/img1.jpg`
+    // nests under two new folder nodes. A plain file (path === name) stays flat.
+    const segments = file.path.split("/").filter(Boolean);
+    setTree((t) => treeWithPath(t, segments.slice(0, -1), item));
     setSelectedFile(item);
     setMessages((m) => [
       ...m,
@@ -540,7 +569,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
         id: ++idRef.current,
         from: file.senderId,
         text: file.verified ? "received over WebRTC — sha256 verified" : "received over WebRTC — SHA-256 mismatch!",
-        file: file.name,
+        file: file.path,
         t: fmtClock(),
       },
     ]);
@@ -580,6 +609,13 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, roomId]);
+
+  /* folder picker — `webkitdirectory` isn't a typed React prop, set it directly.
+   * The input only exists in the live-room phase, so key the effect on phase. */
+  useEffect(() => {
+    if (phase !== "live") return;
+    folderInputRef.current?.setAttribute("webkitdirectory", "");
+  }, [phase]);
 
   /* close the live socket on unmount */
   useEffect(() => {
@@ -641,8 +677,8 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
     socket.sendChat(text);
   }
 
-  async function handleFiles(files: File[]) {
-    if (files.length === 0) return;
+  async function handleFiles(entries: DropFile[]) {
+    if (entries.length === 0) return;
 
     const net = networkRef.current;
     if (!net) {
@@ -652,26 +688,26 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
       ]);
       return;
     }
-    for (const f of files) {
-      const sent = await net.sendFile(f);
+    for (const { file, path } of entries) {
+      const sent = await net.sendFile(file, path);
       if (sent === 0) {
         setMessages((m) => [
           ...m,
-          { id: ++idRef.current, from: "you", text: "no peers connected — open this room in another tab to transfer P2P", file: f.name, t: fmtClock() },
+          { id: ++idRef.current, from: "you", text: "no peers connected — open this room in another tab to transfer P2P", file: path, t: fmtClock() },
         ]);
       } else {
         setMessages((m) => [
           ...m,
-          { id: ++idRef.current, from: "you", text: `sent to ${sent} tab${sent === 1 ? "" : "s"} over the WebRTC mesh`, file: f.name, t: fmtClock() },
+          { id: ++idRef.current, from: "you", text: `sent to ${sent} tab${sent === 1 ? "" : "s"} over the WebRTC mesh`, file: path, t: fmtClock() },
         ]);
       }
     }
   }
 
-  function onDrop(e: React.DragEvent) {
+  async function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    const files = Array.from(e.dataTransfer.files ?? []);
+    const files = await collectDroppedFiles(e.dataTransfer);
     if (files.length > 0) void handleFiles(files);
   }
 
@@ -866,9 +902,14 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
         <aside className="files-panel glass">
           <div className="panel-head">
             <span><FolderOpen size={15} /> Files</span>
-            <button className="icon-btn icon-btn-sm" aria-label="Add files" onClick={() => fileInputRef.current?.click()}>
-              <FolderPlus size={15} />
-            </button>
+            <div className="panel-head-actions">
+              <button className="icon-btn icon-btn-sm" aria-label="Add files" title="Add files" onClick={() => fileInputRef.current?.click()}>
+                <FilePlus size={15} />
+              </button>
+              <button className="icon-btn icon-btn-sm" aria-label="Add folder" title="Add folder" onClick={() => folderInputRef.current?.click()}>
+                <FolderPlus size={15} />
+              </button>
+            </div>
           </div>
           <input
             ref={fileInputRef}
@@ -878,7 +919,18 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               e.target.value = "";
-              if (files.length > 0) void handleFiles(files);
+              if (files.length > 0) void handleFiles(files.map((f) => ({ file: f, path: f.name })));
+            }}
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = "";
+              if (files.length > 0) void handleFiles(files.map((f) => ({ file: f, path: f.webkitRelativePath || f.name })));
             }}
           />
           <div
@@ -888,7 +940,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
             onDrop={onDrop}
             onClick={() => fileInputRef.current?.click()}
             role="button"
-            aria-label="Drop files or click to browse"
+            aria-label="Drop files or folders or click to browse"
           >
             <Upload size={18} />
             <span>Drop files or folders</span>

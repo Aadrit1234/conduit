@@ -139,22 +139,22 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
     const [aId, bId] = ["peer-A", "peer-B"];
     const [sigA, sigB] = signalingPair(aId, bId);
 
-    const aState = { peers: 0, sendPct: 0, received: null as null | { name: string; verified: boolean } };
-    const bState = { peers: 0, recvPct: 0, received: null as null | { name: string; size: number; verified: boolean; sender: string } };
+    const aState = { peers: 0, sendPct: 0, received: null as null | { name: string; verified: boolean }, receivedPaths: [] as string[] };
+    const bState = { peers: 0, recvPct: 0, received: null as null | { name: string; size: number; verified: boolean; sender: string }, receivedPaths: [] as string[] };
 
     const aHandlers: RoomNetworkHandlers = {
       onPeers: (peers) => { aState.peers = peers.filter((p) => p.connected).length; },
       onSendProgress: (_id, _n, sent, total) => { aState.sendPct = Math.round((sent / total) * 100); },
       onReceiveStart: () => {},
       onReceiveProgress: () => {},
-      onReceiveComplete: (f) => { aState.received = f; },
+      onReceiveComplete: (f) => { aState.received = f; aState.receivedPaths.push(f.path); },
     };
     const bHandlers: RoomNetworkHandlers = {
       onPeers: (peers) => { bState.peers = peers.filter((p) => p.connected).length; },
       onSendProgress: () => {},
       onReceiveStart: () => {},
       onReceiveProgress: (_id, received, total) => { bState.recvPct = Math.round((received / total) * 100); },
-      onReceiveComplete: (f) => { bState.received = f; },
+      onReceiveComplete: (f) => { bState.received = f; bState.receivedPaths.push(f.path); },
     };
 
     const netA = new RoomNetwork("SELFTEST", aHandlers, sigA);
@@ -205,6 +205,28 @@ export async function runSelfTest(): Promise<{ pass: boolean; lines: string[] }>
       throw new Error(`B→A transfer failed (${JSON.stringify(aState.received)})`);
     }
     step(`file transferred B→A: ${fmtBytes(size2)} · sha256 verified`);
+
+    // 6. folder transfer — files inside a folder carry their relative paths,
+    //    which is what lets the receiving UI rebuild the sender's tree
+    const folder = [
+      { path: "site-assets/logo.png", size: 2048 },
+      { path: "site-assets/css/main.css", size: 4096 + 17 },
+      { path: "readme.md", size: 128 },
+    ];
+    for (const n of folder) {
+      const buf = new Uint8Array(n.size).map((_, i) => (i * 13 + 5) % 256);
+      const f = new File([buf], n.path.split("/").pop()!, { type: "application/octet-stream" });
+      const sent = await netA.sendFile(f, n.path);
+      if (sent !== 1) throw new Error(`folder file sent to ${sent} peers, expected 1`);
+    }
+    const gotPaths = await waitFor(() => bState.receivedPaths.length >= folder.length, 30_000);
+    if (!gotPaths) {
+      throw new Error(`folder transfer incomplete — got ${JSON.stringify(bState.receivedPaths)}`);
+    }
+    for (const n of folder) {
+      if (!bState.receivedPaths.includes(n.path)) throw new Error(`missing folder path: ${n.path}`);
+    }
+    step(`folder transferred A→B: ${folder.length} files · relative paths preserved`);
 
     netA.stop();
     netB.stop();

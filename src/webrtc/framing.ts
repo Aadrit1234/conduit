@@ -50,3 +50,53 @@ export function fmtBytes(bytes: number): string {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
+
+/* ================= folder-aware drops ================= */
+
+/** A file picked/dropped for transfer, with its path relative to the drop
+ * root — a plain file is just its name, a file inside a dropped folder is
+ * `folder/sub/file.txt`. The path is what the receiver uses to rebuild the
+ * folder tree. */
+export type DropFile = {
+  file: File;
+  path: string;
+};
+
+async function readEntry(entry: FileSystemEntry, base: string, out: DropFile[]): Promise<void> {
+  if (entry.isFile) {
+    const fe = entry as FileSystemFileEntry;
+    const file = await new Promise<File>((resolve, reject) => fe.file(resolve, reject));
+    out.push({ file, path: base ? `${base}/${file.name}` : file.name });
+    return;
+  }
+  if (entry.isDirectory) {
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    // readEntries returns a bounded batch per call (Chromium caps ~100) —
+    // keep reading until it reports none left.
+    const basePath = base ? `${base}/${entry.name}` : entry.name;
+    for (;;) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+        reader.readEntries(resolve, reject)
+      );
+      if (batch.length === 0) break;
+      for (const child of batch) await readEntry(child, basePath, out);
+    }
+  }
+}
+
+/** Collects every file from a drop, traversing dropped folders recursively
+ * (via the Chromium/Safari/Firefox FileSystemEntry API). Falls back to
+ * DataTransfer.files when that API isn't available — in which case dropped
+ * folders degrade to flat file lists. */
+export async function collectDroppedFiles(dt: DataTransfer): Promise<DropFile[]> {
+  const items = Array.from(dt.items ?? []);
+  const entries = items
+    .map((i) => (i as DataTransferItem & { webkitGetAsEntry?: () => FileSystemEntry | null }).webkitGetAsEntry?.())
+    .filter((e): e is FileSystemEntry => Boolean(e));
+  if (entries.length > 0) {
+    const out: DropFile[] = [];
+    for (const entry of entries) await readEntry(entry, "", out);
+    return out;
+  }
+  return Array.from(dt.files ?? []).map((f) => ({ file: f, path: f.name }));
+}

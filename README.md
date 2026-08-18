@@ -62,8 +62,9 @@ peers' connections allow, and the server's disk is never touched.
 To try it locally:
 
 1. Create a room at `http://localhost:5173/room`, then open the resulting `/room/CODE` link in a second tab.
-2. Wait for the topbar to read `mesh · 1 peer`, then drop a file in either tab — it appears
-   in the other tab's file tree, verified by hash, with a download button.
+2. Wait for the topbar to read `mesh · 1 peer`, then drop a file — or a whole folder,
+   which arrives with its structure intact — in either tab. It appears in the other tab's
+   file tree, verified by hash, with a download button.
 
 No peers connected? The drop shows a "no peers connected" hint instead — real transfers need
 another member on the same room code.

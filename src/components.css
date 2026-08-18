@@ -1647,6 +1647,8 @@
 
 .panel-head span { display: inline-flex; align-items: center; gap: 8px; }
 
+.panel-head-actions { display: inline-flex; align-items: center; gap: 4px; }
+
 .panel-head-2 { margin-top: 22px; }
 
 .dropzone {
