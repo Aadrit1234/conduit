@@ -2,10 +2,11 @@
 #
 #   push / PR          -> test, lint, build (frontend + backend)
 #   push to main/tag   -> also build + push container images to GHCR
+#   push to main       -> also redeploy the Render backend via its deploy hook
 #   manual dispatch    -> deploy the images to a server over SSH (compose)
 #
 # Nothing runs until this repo is pushed to GitHub — the workflow file is
-# ready to go (secrets: SSH_HOST, SSH_USER, SSH_KEY, DEPLOY_DIR).
+# ready to go (secrets: SSH_HOST, SSH_USER, SSH_KEY, DEPLOY_DIR, RENDER_DEPLOY_HOOK).
 
 name: ci
 
@@ -82,6 +83,22 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}-backend:latest
             ${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}
+
+  render-deploy:
+    name: Redeploy backend on Render
+    # Every main push redeploys the Render backend through its deploy hook
+    # (https://render.com/docs/deploy-hooks) once tests pass, so the live API
+    # stays in sync without manual clicks. Skipped until the
+    # RENDER_DEPLOY_HOOK secret is set, so CI stays green meanwhile.
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        if: ${{ secrets.RENDER_DEPLOY_HOOK != '' }}
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
 
   deploy:
     name: Deploy to server

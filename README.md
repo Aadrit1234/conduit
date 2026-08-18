@@ -170,6 +170,11 @@ make deploy          # pull + up on a remote host over SSH ($SSH_HOST, $DEPLOY_D
 
 CI/CD: `.github/workflows/ci.yml` runs the same stages on every push/PR, builds and pushes
 images to GHCR on `main`/tags, and has a manual `workflow_dispatch` deploy job over SSH.
+On every push to `main` it also redeploys the Render backend automatically via its
+[deploy hook](https://render.com/docs/deploy-hooks): Render dashboard → `conduit-backend`
+service → Settings → **Deploy Hook**, copy the URL, then add it as the GitHub Actions
+secret `RENDER_DEPLOY_HOOK` (repo Settings → Secrets and variables → Actions). Until that
+secret is set the step is skipped and CI stays green.
 Deploying prebuilt images instead of building on the host:
 
 ```bash
