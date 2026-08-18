@@ -138,6 +138,22 @@ export class PostgresStore implements RoomStore {
     return rows.reverse().map((m) => this.toChatMessage(m));
   }
 
+  async listRooms(): Promise<Room[]> {
+    const { rows } = await this.pool.query<RoomRow>(
+      `SELECT id, code, name, mode, ttl_seconds, key_blob, created_at, expires_at
+       FROM rooms ORDER BY created_at DESC`
+    );
+    return rows.map((r) => this.toRoom(r));
+  }
+
+  async countMessages(roomId: string): Promise<number> {
+    const { rows } = await this.pool.query<{ count: string }>(
+      `SELECT COUNT(*)::int AS count FROM messages WHERE room_id = $1`,
+      [roomId]
+    );
+    return Number(rows[0]?.count ?? 0);
+  }
+
   private toRoom(row: RoomRow): Room {
     return {
       id: row.id,

@@ -270,6 +270,7 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
   const myIdRef = useRef<string | null>(null);
   const lastTypingRef = useRef(0);
   const autoJoinedRef = useRef(false);
+  const closedByAdminRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const folderIdRef = useRef(0);
@@ -442,9 +443,19 @@ export function RoomDemo({ initialCode, onExit }: { initialCode?: string; onExit
         onFileAnnounce() {
           /* files travel over WebRTC — file.announce stays a no-op */
         },
+        onRoomClosed(message) {
+          // The server burned the room (admin action) — leave before the socket
+          // drops, and don't let the generic onClose overwrite the reason.
+          closedByAdminRef.current = true;
+          setLive(null);
+          setE2ee("simulated");
+          setPhase("error");
+          setErrorMsg(message);
+        },
         onClose() {
           setLive(null);
           setE2ee("simulated");
+          if (closedByAdminRef.current) return;
           setPhase("error");
           setErrorMsg("Connection to the server was lost. Reconnect to pick up where you left off.");
         },

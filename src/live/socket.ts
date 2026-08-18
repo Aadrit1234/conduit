@@ -19,6 +19,9 @@ export type LiveSocketEvents = {
   onFileAnnounce(from: string, meta: Record<string, unknown>): void;
   /** Room metadata changed (rename / mode toggle) — pushed by the server. */
   onRoomUpdated?(room: LiveRoom): void;
+  /** The room was closed server-side (e.g. an admin burned it) — expect the
+   * socket to close right after this. */
+  onRoomClosed?(message: string): void;
   /** A member's role changed (admin action). */
   onRoleChanged?(peerId: string, role: "admin" | "member" | "viewer", members: ServerMember[]): void;
   onClose(): void;
@@ -29,6 +32,7 @@ type ServerToClient =
   | { type: "presence.join"; peerId: string; name: string; members: ServerMember[] }
   | { type: "presence.leave"; peerId: string; name: string; members: ServerMember[] }
   | { type: "room.updated"; room: LiveRoom }
+  | { type: "room.closed"; message: string }
   | { type: "role.changed"; peerId: string; role: "admin" | "member" | "viewer"; members: ServerMember[] }
   | { type: "chat.message"; seq: number; from: string; payload: string; ts: string }
   | { type: "typing"; from: string; active: boolean }
@@ -89,6 +93,9 @@ export class LiveRoomSocket {
             break;
           case "room.updated":
             this.events.onRoomUpdated?.(msg.room);
+            break;
+          case "room.closed":
+            this.events.onRoomClosed?.(msg.message);
             break;
           case "role.changed":
             this.events.onRoleChanged?.(msg.peerId, msg.role, msg.members);

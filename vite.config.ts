@@ -12,6 +12,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/rooms': { target: serverTarget, changeOrigin: true },
+      // Admin API paths only — the /admin SPA page itself must not be proxied.
+      '/admin/': { target: serverTarget, changeOrigin: true },
       '/health': { target: serverTarget, changeOrigin: true },
       '/ws': { target: wsTarget, ws: true },
     },

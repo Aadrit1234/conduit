@@ -60,6 +60,7 @@ export type WsServerMessage =
   | { type: "presence.join"; peerId: string; name: string; members: Member[] }
   | { type: "presence.leave"; peerId: string; name: string; members: Member[] }
   | { type: "room.updated"; room: PublicRoom }
+  | { type: "room.closed"; message: string }
   | { type: "role.changed"; peerId: string; role: MemberRole; members: Member[] }
   | { type: "chat.message"; seq: number; from: string; payload: string; ts: string }
   | { type: "typing"; from: string; active: boolean }

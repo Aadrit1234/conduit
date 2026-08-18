@@ -13,6 +13,10 @@
 # rooms/history there; without it the backend falls back to an in-memory store.
 # Keep the connection string out of this file — reference it as a Render secret.
 #
+# Admin console: /admin is enabled by default with password CONDUIT@2026.
+# Override by setting ADMIN_PASSWORD on this service (Render dashboard → Environment),
+# or set it to an empty string to disable the admin API entirely.
+#
 # Note: the free plan sleeps after 15 minutes idle and cold-starts on the next
 # request; upgrade for an always-on, low-latency room server.
 services:

@@ -12,6 +12,7 @@ import { Architecture } from "./components/Architecture";
 import { CTA } from "./components/CTA";
 import { Footer } from "./components/Footer";
 import { RoomDemo } from "./components/RoomDemo";
+import { Admin } from "./components/Admin";
 
 function Landing() {
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/" element={<motion.div key="landing" {...fadeIn}><Landing /></motion.div>} />
           {/* one route for /room and /room/:code so creating a room just updates the URL */}
           <Route path="/room/:code?" element={<motion.div key="room" {...fadeIn}><RoomRoute /></motion.div>} />
+          <Route path="/admin" element={<motion.div key="admin" {...fadeIn}><Admin /></motion.div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

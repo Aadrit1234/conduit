@@ -2099,6 +2099,205 @@
 
 .preview-actions { margin-left: auto; display: flex; gap: 8px; }
 
+/* ================= Admin console ================= */
+
+.admin-shell {
+  height: 100svh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 14px;
+}
+
+.admin-orbit {
+  background: linear-gradient(135deg, #ff5c9d, #7c5cff);
+}
+
+.admin-error {
+  color: var(--pink);
+  font-size: 13px;
+  background: rgba(255, 92, 157, 0.08);
+  border: 1px solid rgba(255, 92, 157, 0.3);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.admin-login-btn { width: 100%; justify-content: center; margin-top: 4px; }
+
+.admin-topbar {
+  border-radius: 16px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-top-left,
+.admin-top-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+  font-size: 16px;
+}
+
+.admin-title-icon { color: var(--violet); }
+
+.admin-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 4px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 14px;
+}
+
+.admin-stat svg { color: var(--cyan); flex-shrink: 0; }
+.admin-stat strong { font-size: 22px; font-family: var(--font-display); }
+.admin-stat span { color: var(--faint); font-size: 12.5px; }
+
+.admin-loading,
+.admin-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--faint);
+  font-size: 13px;
+  padding: 34px;
+  border-radius: 14px;
+}
+
+.admin-table-wrap {
+  border-radius: 16px;
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.admin-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:last-child td { border-bottom: none; }
+.admin-table tbody tr:hover { background: var(--hover); }
+
+.admin-num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-actions { text-align: right; }
+
+.admin-code {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13.5px;
+}
+
+.admin-code:hover { text-decoration: underline; }
+
+.admin-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.admin-dim { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
+
+.admin-rename { display: flex; align-items: center; gap: 6px; }
+
+.admin-rename input {
+  width: 150px;
+  font-size: 13px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--input-bg, var(--bg));
+  color: var(--text);
+  outline: none;
+}
+
+.admin-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: capitalize;
+  border-radius: 999px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.admin-mode-ephemeral { color: var(--amber); border-color: rgba(251, 191, 36, 0.4); }
+.admin-mode-ephemeral:hover { background: rgba(251, 191, 36, 0.08); }
+.admin-mode-permanent { color: var(--cyan); border-color: rgba(34, 211, 238, 0.4); }
+.admin-mode-permanent:hover { background: rgba(34, 211, 238, 0.08); }
+
+.admin-row-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+.admin-burn { color: var(--pink); }
+.admin-burn:hover { border-color: var(--pink); color: #ff8ab7; }
+
+.admin-burn-confirm {
+  color: #fff;
+  border-color: var(--pink);
+  background: var(--pink);
+}
+
 /* ================= responsive ================= */
 
 @media (max-width: 1080px) {

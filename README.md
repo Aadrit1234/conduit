@@ -117,6 +117,20 @@ Runs a standalone diagnostic that probes raw WebRTC capability, then exercises t
 mesh + transfer pipeline (two loopback peer connections, transfers in both directions).
 Useful to verify the WebRTC stack in a given browser/context.
 
+## Admin console (`/admin`)
+
+An operator dashboard for the whole server, gated by a single password. Open
+`/admin` on the site and type the password — it defaults to `CONDUIT@2026`, and
+there is deliberately no link to it anywhere on the site.
+
+Override the password with `ADMIN_PASSWORD` on the backend (`server/.env.example`), or
+set it to an empty string to disable the admin API entirely. Sessions last 12h.
+
+Admins can list every room with live member + message counts, rename rooms, toggle
+ephemeral/permanent, and burn rooms — burning kicks all connected members out with a
+"closed by an admin" notice. Chat payloads are end-to-end encrypted, so the console
+shows room metadata only, never message content.
+
 ## Deployment
 
 The whole stack ships as containers — frontend (nginx) + backend (Fastify) + Postgres:

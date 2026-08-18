@@ -46,14 +46,28 @@ export const wsPlugin: FastifyPluginAsync<HubOptions> = async (app, opts) => {
     return roles.get(roomId)?.get(peerId) ?? "member";
   }
 
-  // Fill the root-decorated hub bridge so the HTTP layer (rooms PATCH) can push
-  // room metadata updates to connected clients (see app.ts). The mode cache is
-  // kept in sync so a PATCH toggle is honored by leave-vs-burn.
-  (app as unknown as { conduitHub: Partial<{ broadcastRoom(roomId: string, msg: WsServerMessage): void }> }).conduitHub.broadcastRoom =
-    (roomId, msg) => {
-      if (msg.type === "room.updated") roomModes.set(roomId, msg.room.mode);
-      broadcast(roomId, msg);
-    };
+  // Fill the root-decorated hub bridge so the HTTP layer (rooms PATCH, admin
+  // API) can push to connected clients (see app.ts). The mode cache is kept in
+  // sync so a PATCH toggle is honored by leave-vs-burn.
+  type HubBridge = {
+    broadcastRoom(roomId: string, msg: WsServerMessage): void;
+    liveMembers(roomId: string): number;
+    closeRoom(roomId: string, message: string): void;
+  };
+  const hub = (app as unknown as { conduitHub: Partial<HubBridge> }).conduitHub;
+  hub.broadcastRoom = (roomId, msg) => {
+    if (msg.type === "room.updated") roomModes.set(roomId, msg.room.mode);
+    broadcast(roomId, msg);
+  };
+  hub.liveMembers = (roomId) => rooms.get(roomId)?.size ?? 0;
+  hub.closeRoom = (roomId, message) => {
+    const peers = rooms.get(roomId);
+    if (!peers) return;
+    for (const conn of peers.values()) {
+      send(conn, { type: "room.closed", message } satisfies WsServerMessage);
+      conn.socket.close();
+    }
+  };
 
   function send(conn: Connection, msg: WsServerMessage) {
     if (conn.socket.readyState === conn.socket.OPEN) {

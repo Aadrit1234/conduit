@@ -51,6 +51,10 @@ export interface RoomStore {
   deleteRoom(id: string): Promise<boolean>;
   /** Deletes rooms past their expiry; returns the ids removed. */
   purgeExpired(now?: Date): Promise<string[]>;
+  /** Every room in the store, newest first. Used by the /admin management API. */
+  listRooms(): Promise<Room[]>;
+  /** Number of persisted messages in a room. Used by the /admin management API. */
+  countMessages(roomId: string): Promise<number>;
   /** Persists a message and returns it with the room's next sequence number. */
   saveMessage(roomId: string, author: string, payload: string): Promise<ChatMessage>;
   listMessages(roomId: string, limit?: number): Promise<ChatMessage[]>;

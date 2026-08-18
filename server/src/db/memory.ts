@@ -116,6 +116,16 @@ export class MemoryStore implements RoomStore {
     return list.slice(-limit).map((m) => this.toChatMessage(m));
   }
 
+  async listRooms(): Promise<Room[]> {
+    return [...this.rooms.values()]
+      .map((r) => this.toPublic(r))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async countMessages(roomId: string): Promise<number> {
+    return this.messages.get(roomId)?.length ?? 0;
+  }
+
   private toPublic(room: RoomRecord): Room {
     return {
       id: room.id,

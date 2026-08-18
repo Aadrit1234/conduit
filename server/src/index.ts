@@ -48,7 +48,7 @@ async function makeStore(): Promise<{ store: RoomStore; close: () => Promise<voi
 }
 
 const { store, close: closeStore } = await makeStore();
-const app = buildApp({ store, logger: true });
+const app = buildApp({ store, logger: true, adminPassword: config.adminPassword });
 
 // Ephemeral-room sweeper: purges expired rooms (and cascade-deletes their rows).
 const sweeper = setInterval(() => {

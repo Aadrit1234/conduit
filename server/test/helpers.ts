@@ -11,9 +11,9 @@ export type TestServer = {
   close: () => Promise<void>;
 };
 
-export async function startTestServer(): Promise<TestServer> {
+export async function startTestServer(opts: { adminPassword?: string | null } = {}): Promise<TestServer> {
   const store = new MemoryStore();
-  const app = buildApp({ store });
+  const app = buildApp({ store, adminPassword: opts.adminPassword ?? null });
   await app.listen({ port: 0, host: "127.0.0.1" });
   const address = app.server.address();
   const port = typeof address === "object" && address ? address.port : 0;
