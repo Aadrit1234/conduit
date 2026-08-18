@@ -1085,7 +1085,10 @@
 /* ================= Room demo ================= */
 
 .room-shell {
-  min-height: 100svh;
+  /* Lock the room to the viewport: only the inner chat/sidebar areas scroll,
+     the topbar and panels stay put instead of riding the page scroll. */
+  height: 100svh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   padding: 16px;
@@ -1100,6 +1103,7 @@
   place-items: center;
   position: relative;
   padding: 40px 0;
+  overflow-y: auto;
 }
 
 .setup-back {
@@ -1286,6 +1290,7 @@
   align-content: center;
   gap: 18px;
   text-align: center;
+  overflow-y: auto;
 }
 
 .connecting-orbit {
@@ -1630,7 +1635,7 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  max-height: calc(100svh - 132px);
+  min-height: 0;
 }
 
 .panel-head {
@@ -2116,7 +2121,6 @@
   .pipe-arrow { width: 2px; height: 30px; transform: rotate(0deg); }
   .room-body { grid-template-columns: 1fr; }
   .files-panel { display: none; }
-  .chat-panel { height: calc(100svh - 150px); }
   .hero { padding-top: 100px; }
   .hero-stats { gap: 26px; }
   .msg { max-width: 92%; }
