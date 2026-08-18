@@ -345,6 +345,25 @@ button {
   border-radius: 11px;
 }
 
+.btn-xs {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 9px;
+  gap: 7px;
+}
+
+.btn-danger {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #ff6ba3;
+  border-color: #ff6ba3;
+  transform: translateY(-1px);
+}
+
 /* ---------- Marquee ---------- */
 
 .marquee {

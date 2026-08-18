@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -115,7 +115,6 @@ export function Admin() {
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [row, setRow] = useState<RowState>({ editing: null, editValue: "", confirmBurn: null });
-  const confirmTimer = useRef<number | null>(null);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -148,8 +147,6 @@ export function Admin() {
       window.clearInterval(iv);
     };
   }, [token, refreshKey]);
-
-  useEffect(() => () => { if (confirmTimer.current) window.clearTimeout(confirmTimer.current); }, []);
 
   function logout() {
     clearAdminToken();
@@ -184,17 +181,15 @@ export function Admin() {
   }
 
   function armBurn(code: string) {
-    if (row.confirmBurn === code) {
-      void doBurn(code);
-      return;
-    }
+    // Show an explicit inline confirmation; the user must click "Burn" to act.
     setRow((r) => ({ ...r, confirmBurn: code, editing: null }));
-    if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
-    confirmTimer.current = window.setTimeout(() => setRow((r) => ({ ...r, confirmBurn: null })), 3500);
+  }
+
+  function cancelBurn() {
+    setRow((r) => ({ ...r, confirmBurn: null }));
   }
 
   async function doBurn(code: string) {
-    if (confirmTimer.current) window.clearTimeout(confirmTimer.current);
     setRow((r) => ({ ...r, confirmBurn: null }));
     try {
       await adminBurnRoom(code);
@@ -328,14 +323,26 @@ export function Admin() {
                           <button className="icon-btn icon-btn-sm" onClick={() => navigate(`/room/${room.code}`)} aria-label="Open room" title="Open room">
                             <ExternalLink size={13} />
                           </button>
-                          <button
-                            className={`icon-btn icon-btn-sm ${confirm ? "admin-burn-confirm" : "admin-burn"}`}
-                            onClick={() => armBurn(room.code)}
-                            aria-label={confirm ? `Confirm burning room ${room.code}` : `Burn room ${room.code}`}
-                            title={confirm ? "Click again to burn" : "Burn room"}
-                          >
-                            {confirm ? <Zap size={13} /> : <Trash2 size={13} />}
-                          </button>
+                          {confirm ? (
+                            <div className="admin-burn-confirm-box">
+                              <span>Burn {room.code}?</span>
+                              <button className="btn btn-danger btn-xs" onClick={() => void doBurn(room.code)}>
+                                <Trash2 size={12} /> Burn
+                              </button>
+                              <button className="icon-btn icon-btn-sm" onClick={cancelBurn} aria-label="Cancel burn" title="Cancel">
+                                <X size={13} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="icon-btn icon-btn-sm admin-burn"
+                              onClick={() => armBurn(room.code)}
+                              aria-label={`Burn room ${room.code}`}
+                              title="Burn room"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

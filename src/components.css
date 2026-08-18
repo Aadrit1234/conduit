@@ -2287,15 +2287,28 @@
 .admin-mode-permanent { color: var(--cyan); border-color: rgba(34, 211, 238, 0.4); }
 .admin-mode-permanent:hover { background: rgba(34, 211, 238, 0.08); }
 
-.admin-row-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.admin-row-actions { display: flex; justify-content: flex-end; gap: 6px; align-items: center; }
 
 .admin-burn { color: var(--pink); }
 .admin-burn:hover { border-color: var(--pink); color: #ff8ab7; }
 
-.admin-burn-confirm {
-  color: #fff;
-  border-color: var(--pink);
-  background: var(--pink);
+.admin-burn-confirm-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 92, 157, 0.45);
+  background: rgba(255, 92, 157, 0.08);
+  white-space: nowrap;
+}
+
+.admin-burn-confirm-box span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pink);
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
 }
 
 /* ================= responsive ================= */
