@@ -32,7 +32,14 @@ export type ConduitHub = {
 /** Builds a configured Fastify instance. Call `listen()` or `inject()` on it. */
 export function buildApp(opts: BuildAppOptions): FastifyInstance {
   const app = Fastify({ logger: opts.logger ?? false });
-  app.register(cors, { origin: true });
+  // origin: true reflects any origin (the frontend may live on a different
+  // host than the API). The @fastify/cors default only allows GET/HEAD/POST —
+  // the admin console (DELETE burn, PATCH rename/mode) and the room PATCH
+  // would otherwise be blocked by the browser's CORS preflight.
+  app.register(cors, {
+    origin: true,
+    methods: ["GET", "HEAD", "POST", "PATCH", "DELETE"],
+  });
   app.register(websocket);
   const hub: Partial<ConduitHub> = {};
   app.decorate("conduitHub", hub);

@@ -18,6 +18,25 @@ async function login(app: ReturnType<typeof makeApp>["app"], password = PASSWORD
   return res.json().token as string;
 }
 
+test("CORS preflight allows the admin methods (DELETE/PATCH) cross-origin", async () => {
+  const { app } = makeApp();
+  // A frontend on another origin (e.g. Vercel -> Render) triggers a preflight
+  // for DELETE/PATCH. Without DELETE/PATCH in allow-methods the browser blocks
+  // the actual request with "Failed to fetch".
+  const headers = {
+    origin: "https://conduit.example.com",
+    "access-control-request-method": "DELETE",
+    "access-control-request-headers": "authorization",
+  };
+  const preflight = await app.inject({ method: "OPTIONS", url: "/admin/rooms/ABC123", headers });
+  assert.equal(preflight.statusCode, 204);
+  const methods = preflight.headers["access-control-allow-methods"] ?? "";
+  assert.match(methods, /DELETE/);
+  assert.match(methods, /PATCH/);
+  assert.equal(preflight.headers["access-control-allow-origin"], "https://conduit.example.com");
+  await app.close();
+});
+
 test("admin API is disabled when ADMIN_PASSWORD is not configured", async () => {
   const { app } = makeApp(null);
   const res = await app.inject({ method: "POST", url: "/admin/login", payload: { password: "x" } });
